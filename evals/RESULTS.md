@@ -745,3 +745,34 @@ measurement, so the spread around 2x (2.69x on boolq, 1.27x on chaosnli, which h
 validation split and went from two test passes to one) is other load on the machine, not
 the code; quote latency only from `scripts/load_cost.py`. A full 22-config suite with dumps should take about 35
 to 40 minutes instead of 75.
+
+## 2026-09-28: corpus D (licensed sources filled to 1,000 rows), and the seed average served live
+
+Seeds 0 + 1 of the corpus-C attention LoRA, served live as an ensemble (`evals/ensemble_check.py`):
+0.7534 macro against 0.753 simulated from row dumps, so the simulation holds.
+
+Corpus D is corpus C with each licensed, trained jev-bench source filled from 300 to 1,000
+rows (23,185 rows; `scripts/build_corpus_d.py`), trained with seed 0 and checkpoint selection
+on validation macro (`--select-records`), which kept the final step:
+
+| system | macro acc | Brier | vs corpus-C s0 (95% CI) |
+|---|---|---|---|
+| corpus C, seed 0 | 0.748 | 0.304 | baseline |
+| **corpus D, seed 0** | **0.760** | **0.283** | +1.1 pts (+0.3 to +2.0) |
+| corpus D + corpus C s0 averaged | 0.758 | 0.286 | +1.0 pts (+0.4 to +1.6) |
+| corpus C s0 + s1 averaged | 0.753 | 0.301 | +0.5 pts (-0.0 to +1.0) |
+
+Split by whether corpus D trains on a config (paired bootstrap over those configs only):
+
+| configs | n | corpus D against corpus C |
+|---|---|---|
+| filled with more rows | 15 | +2.6 pts (+1.7 to +3.6) |
+| not trained on: held out (civil_comments, fever_evidence, helpsteer2_helpfulness) or license-dropped (sst5, yelp5, stsb) plus chaosnli | 7 | **-2.1 pts (-3.9 to -0.3)** |
+
+- The gain is all on the tasks it trains on more; on tasks it never sees it is worse, and the
+  interval excludes zero. That is the benchmark-overfitting risk flagged before the run: more
+  jev-bench-format rows (73% of the corpus, from 40%) buy in-distribution accuracy at some cost
+  to transfer. The four-source held-out set used in training did not show it (accuracy 0.755
+  against 0.749), because three of its four sources are exactly these held-out configs at the
+  row level and it averages rows, not configs.
+- Without civil_comments corpus D is 0.752 against Jev's 0.733.
