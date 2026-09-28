@@ -11,13 +11,16 @@ Each failed job becomes one row, in the calibration JSONL format:
 - label: read from what happened next, with no human in the loop.
   - "0" (not a code change): the same job passed on a retry in the same pipeline, or a later
     pipeline on the same ref and the same commit succeeded.
-  - "1" (code change): the next successful pipeline on that ref is on a different commit, and
-    no pipeline on the failing commit succeeded first.
-  - A failure with no later success on its ref is left out (its outcome is unknown).
+  - "1" (code change): the failure reproduced on the same commit (a retry of the job failed
+    again, or a later pipeline on that commit failed too), and the next success on the ref
+    came on a different commit.
+  - Everything else is left out. That covers a failure with no later success, and a single
+    failure followed by a new commit that passed. The second case was most of the first
+    extraction (93% "code"), because on merge-request pipelines nearly every follow-up is a
+    new commit, so a flaky failure plus any push read as a code change. `--loose` keeps
+    those as "1" to reproduce that run.
 
-The labels are noisy in one known direction. A flaky failure followed by an unrelated push
-that happens to pass reads as "code change". So the numbers from this set are a floor, not a
-ceiling. Rows are split by time: the newest `--test-fraction` go to `test.jsonl`, the rest to
+Rows are split by time: the newest `--test-fraction` go to `test.jsonl`, the rest to
 `calibration.jsonl`. Output goes under data/, which git ignores. Logs can hold internal
 details, so keep the output off shared storage.
 
@@ -101,7 +104,9 @@ class GitLab:
 
 
 def label_failures(pipelines: list[dict]) -> dict[int, str]:
-    """Pipeline id -> "0" or "1" for failed pipelines whose outcome on their ref is known."""
+    """Pipeline id -> "0" (fixed without a code change), "1" (reproduced on its commit, then fixed
+    by a new one) or "new_commit" (failed once, then a new commit passed: ambiguous) for failed
+    pipelines with a later success on their ref."""
     by_ref: dict[str, list[dict]] = defaultdict(list)
     for p in pipelines:
         by_ref[p["ref"]].append(p)
@@ -115,7 +120,12 @@ def label_failures(pipelines: list[dict]) -> dict[int, str]:
             if later_success is None:
                 continue
             same_commit_success = any(q["status"] == "success" and q["sha"] == p["sha"] for q in runs[i + 1:])
-            labels[p["id"]] = "0" if same_commit_success or later_success["sha"] == p["sha"] else "1"
+            if same_commit_success or later_success["sha"] == p["sha"]:
+                labels[p["id"]] = "0"
+                continue
+            before_fix = runs[i + 1: runs.index(later_success)]
+            reproduced = any(q["status"] == "failed" and q["sha"] == p["sha"] for q in before_fix)
+            labels[p["id"]] = "1" if reproduced else "new_commit"
     return labels
 
 
@@ -127,6 +137,8 @@ def main() -> int:
     parser.add_argument("--projects", default=None, help="comma list of project ids or paths (default: all active)")
     parser.add_argument("--max-rows", type=int, default=3000)
     parser.add_argument("--test-fraction", type=float, default=0.3)
+    parser.add_argument("--loose", action="store_true",
+                        help='label a single failure fixed by a new commit "1" (noisy; see the docstring)')
     args = parser.parse_args()
     gl = GitLab(args.host)
     out = Path(args.out)
@@ -157,11 +169,18 @@ def main() -> int:
                 continue
             jobs = list(gl.pages(f"/projects/{pid}/pipelines/{p['id']}/jobs", include_retried="true"))
             passed = {j["name"] for j in jobs if j["status"] == "success"}
+            failed_attempts = Counter(j["name"] for j in jobs if j["status"] == "failed")
             for job in jobs:
                 if job["status"] != "failed" or job.get("allow_failure"):
                     continue
                 # A retry of this job that passed in the same pipeline settles it: a rerun was enough.
                 label = "0" if job["name"] in passed else labels[p["id"]]
+                if label == "new_commit":
+                    # A retry that failed again reproduces it on this commit just as a re-run pipeline does.
+                    label = "1" if failed_attempts[job["name"]] >= 2 or args.loose else None
+                if label is None:
+                    stats["ambiguous"] += 1
+                    continue
                 try:
                     trace = gl.get(f"/projects/{pid}/jobs/{job['id']}/trace").text
                 except httpx.HTTPStatusError:

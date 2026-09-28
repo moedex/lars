@@ -33,6 +33,9 @@ def test_labels_follow_what_fixed_the_failure():
         p(7, "mr/3", "e", "failed"), p(8, "mr/3", "f", "failed"), p(9, "mr/3", "f", "success"),
     ]
     labels = label_failures(pipelines)
-    assert labels[1] == "0" and labels[3] == "1"
+    assert labels[1] == "0"
+    assert labels[3] == "new_commit"  # failed once, then a new commit passed: ambiguous
     assert 5 not in labels and 6 not in labels
-    assert labels[7] == "1" and labels[8] == "0"
+    assert labels[7] == "new_commit" and labels[8] == "0"
+    reproduced = label_failures([p(1, "mr", "a", "failed"), p(2, "mr", "a", "failed"), p(3, "mr", "b", "success")])
+    assert reproduced[1] == "1"  # failed again on the same commit before a new one fixed it
