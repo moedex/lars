@@ -772,7 +772,7 @@ Split by whether corpus D trains on a config (paired bootstrap over those config
 - The gain is all on the tasks it trains on more; on tasks it never sees it is worse, and the
   interval excludes zero. That is the benchmark-overfitting risk flagged before the run: more
   jev-bench-format rows (73% of the corpus, from 40%) buy in-distribution accuracy at some cost
-  to transfer. The four-source held-out set used in training did not show it (accuracy 0.755
-  against 0.749), because three of its four sources are exactly these held-out configs at the
-  row level and it averages rows, not configs.
+  to transfer. The held-out set used during training did not show it (1,000 train-split rows
+  from the same sources: accuracy 0.755 against 0.749, Brier better), so it is not a reliable
+  guard; why the two disagree is not yet known.
 - Without civil_comments corpus D is 0.752 against Jev's 0.733.
