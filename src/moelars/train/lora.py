@@ -7,10 +7,14 @@ letter positions. Whole sources are held out (the same split as the pointer head
 scored at every evaluation. Which checkpoint becomes the adapter:
 
 - With `--select-records` (the benchmark's validation rows, e.g.
-  `data/train/jev-bench.validation.jsonl`), the one with the best macro accuracy over the
-  selection sources, the metric the suite reports. Held-out Brier on a few sources proved
-  a poor proxy: on the corpus-C experts run it chose a half-epoch checkpoint that was the
-  worst adapter of the run on the suite.
+  `data/train/jev-bench.validation.jsonl`), the one with the best selection score: the mean
+  of two macro accuracies, over the selection sources the run trains on ("seen") and over
+  those it does not ("unseen", e.g. the held-out sources). Weighting the groups equally
+  keeps a checkpoint that buys benchmark accuracy with transfer from winning: corpus D
+  gained 2.6 points on the configs it trained on more and lost 2.1 on the rest, and a plain
+  macro over all sources, mostly seen ones, would have hidden that. Held-out Brier on a few
+  sources proved a poor proxy too: on the corpus-C experts run it chose a half-epoch
+  checkpoint that was the worst adapter of the run on the suite.
 - Otherwise, the one with the best held-out Brier.
 
 Either way the untrained model is the first candidate. If no checkpoint beats it, the saved
@@ -156,15 +160,22 @@ def loss_fn(mx: Any, model: Any, ids, lengths, label_ids, kmask, target, brier_w
     return ce + brier_weight * brier
 
 
-def macro_by_source(mx: Any, model: Any, examples: list[Example], batch_tokens: int) -> dict[str, Any]:
-    """Accuracy and Brier per source, and their unweighted means: the suite's macro average."""
+def macro_by_source(mx: Any, model: Any, examples: list[Example], batch_tokens: int,
+                    trained: set[str] | None = None) -> dict[str, Any]:
+    """Accuracy and Brier per source and their unweighted means (the suite's macro average),
+    split into sources the run trains on and sources it does not; `score` weighs the two equally."""
     by_source: dict[str, list[Example]] = {}
     for example in examples:
         by_source.setdefault(example.source, []).append(example)
     per = {source: evaluate(mx, model, group, batch_tokens) for source, group in sorted(by_source.items())}
+    trained = trained or set()
+    groups = {name: [r["acc"] for source, r in per.items() if (source in trained) == is_seen]
+              for name, is_seen in (("seen", True), ("unseen", False))}
+    macros = {f"{name}_macro_acc": float(np.mean(accs)) for name, accs in groups.items() if accs}
     return {"n": len(examples), "sources": len(per),
             "macro_acc": float(np.mean([r["acc"] for r in per.values()])),
             "macro_brier": float(np.mean([r["brier"] for r in per.values()])),
+            **macros, "score": float(np.mean(list(macros.values()))),
             "per_source": {source: round(r["acc"], 4) for source, r in per.items()}}
 
 
@@ -307,9 +318,11 @@ def train(
 
     heldout, skipped_heldout = presentations(backend, heldout_records, labels, rng=None, max_tokens=max_tokens)
     select, _ = presentations(backend, select_records or [], labels, rng=None, max_tokens=max_tokens)
+    trained_sources = {r.source for r in train_records}
     if select:
-        print(f"selecting on macro accuracy over {len(select)} rows from "
-              f"{len({e.source for e in select})} sources", flush=True)
+        unseen = sorted({e.source for e in select} - trained_sources)
+        print(f"selecting on seen and unseen macro accuracy over {len(select)} rows from "
+              f"{len({e.source for e in select})} sources; unseen: {unseen}", flush=True)
     first_epoch, skipped = presentations(backend, train_records, labels, rng=rng, max_tokens=max_tokens)
     steps_per_epoch = len(batches(first_epoch, batch_tokens, rng=None))
     total_steps = max(1, steps_per_epoch * epochs)
@@ -329,13 +342,13 @@ def train(
     history: list[dict[str, Any]] = []
     started = time.perf_counter()
     baseline = evaluate(mx, model, heldout, batch_tokens) if heldout else None
-    baseline_select = macro_by_source(mx, model, select, batch_tokens) if select else None
+    baseline_select = macro_by_source(mx, model, select, batch_tokens, trained_sources) if select else None
     print(json.dumps({"step": 0, "heldout": baseline, "select": baseline_select}), flush=True)
 
     def score(entry: dict[str, Any] | None, select_entry: dict[str, Any] | None) -> float | None:
         """Higher is better: macro accuracy on the selection rows, else minus held-out Brier."""
         if select:
-            return select_entry["macro_acc"] if select_entry else None
+            return select_entry["score"] if select_entry else None
         return -entry["brier"] if entry and entry.get("n") else None
 
     best = score(baseline, baseline_select)
@@ -350,7 +363,7 @@ def train(
         if heldout:
             entry["heldout"] = evaluate(mx, model, heldout, batch_tokens)
         if select:
-            entry["select"] = macro_by_source(mx, model, select, batch_tokens)
+            entry["select"] = macro_by_source(mx, model, select, batch_tokens, trained_sources)
         current = score(entry.get("heldout"), entry.get("select"))
         improved = current is None or best is None or current > best
         config["moelars"]["improved"] = True
@@ -420,7 +433,12 @@ def main() -> int:
     parser.add_argument("--select-records", nargs="+", default=None,
                         help="choose the checkpoint by macro accuracy over these records' sources "
                              "(e.g. data/train/jev-bench.validation.jsonl) instead of held-out Brier")
-    parser.add_argument("--select-per-source", type=int, default=100, help="selection rows kept per source")
+    parser.add_argument("--select-per-source", type=int, default=100, help="selection rows kept per trained source")
+    parser.add_argument("--select-unseen-per-source", type=int, default=300,
+                        help="selection rows kept per source the run does not train on (fewer such sources, "
+                             "so each gets more rows)")
+    parser.add_argument("--select-skip", default="",
+                        help="comma list of sources to leave out of selection, e.g. the license-dropped ones")
     parser.add_argument("--out", default="checkpoints/lora")
     args = parser.parse_args()
 
@@ -443,13 +461,16 @@ def main() -> int:
     if args.select_records:
         # A selection row whose state is also a training state would reward memorizing it.
         seen_states = {json.dumps(r.state, sort_keys=True, default=str) for r in records}
+        skip = {x.strip() for x in args.select_skip.split(",") if x.strip()}
+        trained = {r.source for r in train_records}
         per_source: dict[str, list[Record]] = {}
         for path in args.select_records:
             for r in read_records(path):
-                if len(r.options) <= args.max_options and \
+                if r.source not in skip and len(r.options) <= args.max_options and \
                         json.dumps(r.state, sort_keys=True, default=str) not in seen_states:
                     per_source.setdefault(r.source, []).append(r)
-        select_records = [r for group in per_source.values() for r in group[: args.select_per_source]]
+        select_records = [r for source, group in per_source.items() for r in
+                          group[: args.select_per_source if source in trained else args.select_unseen_per_source]]
 
     from moelars.backends.mlx import MLXBackend
 
@@ -462,7 +483,8 @@ def main() -> int:
           meta={"model": args.model, "keys": args.keys, "records": args.records, "limit": args.limit,
                 "holdout_fraction": args.holdout_fraction,
                 "heldout_sources": sorted({r.source for r in heldout_records}),
-                "selection": {"records": args.select_records, "per_source": args.select_per_source}
+                "selection": {"records": args.select_records, "per_source": args.select_per_source,
+                              "unseen_per_source": args.select_unseen_per_source, "skip": args.select_skip}
                 if args.select_records else None})
     return 0
 

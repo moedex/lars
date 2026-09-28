@@ -232,3 +232,17 @@ def test_selection_rows_decide_the_checkpoint_and_every_step_is_kept(tmp_path):
     assert all("select" in entry and entry["select"]["sources"] == 2 for entry in history)
     assert json.loads((out / "adapter_config.json").read_text())["moelars"]["improved"] is True
     assert sorted(p.name for p in (tmp_path / "adapter.steps").iterdir()) == [f"step-{e['step']}" for e in history]
+
+
+def test_selection_score_weighs_seen_and_unseen_sources_equally():
+    backend = _Backend(_tiny(seed=3))
+    # Three presentations of src/a (seen) and one of src/b (unseen).
+    records = [_records()[0]] * 3 + [_records()[1]]
+    examples, _ = lora.presentations(backend, records, ["A", "B", "C"], rng=None, max_tokens=2048)
+    result = lora.macro_by_source(mx, backend.model, examples, 4096, trained={"src/a"})
+    per = result["per_source"]
+    assert result["seen_macro_acc"] == pytest.approx(per["src/a"], abs=1e-4)
+    assert result["unseen_macro_acc"] == pytest.approx(per["src/b"], abs=1e-4)
+    assert result["score"] == pytest.approx((per["src/a"] + per["src/b"]) / 2, abs=1e-4)
+    everything_seen = lora.macro_by_source(mx, backend.model, examples, 4096, trained={"src/a", "src/b"})
+    assert "unseen_macro_acc" not in everything_seen and everything_seen["score"] == everything_seen["macro_acc"]
