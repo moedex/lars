@@ -717,3 +717,31 @@ per config):
 
 None is outside test-row noise at 200 rows. The stsb regression of the old corpus (0.425 to
 0.350) is gone at 0.455: corpus C does not train on stsb.
+
+## 2026-09-28: the suite collects each split once
+
+`run_suite.py` used to run the model over test twice (raw, then calibrated) and over
+validation twice (calibration fit, then the row dump), although raw logits do not depend on
+the calibrator. Since `a78847d` each split goes through the model once
+(`evalset.collect_timed`) and the raw score, calibration fit, calibrated score and row
+dump all read from that one pass.
+
+Check: five configs of the corpus-C attention LoRA, seed 1, re-run with the new code against
+the seed-1 suite the old code wrote on 2026-09-25. Metrics and all 1,800 dumped rows (test and
+validation) are bitwise identical: every accuracy, ECE, Brier, cov@5% and per-row probability
+difference is 0.
+
+| config | prim | old s | new s | speedup |
+|---|---|---|---|---|
+| boolq | noul | 195.5 | 72.6 | 2.69x |
+| sst5 | score | 168.8 | 68.5 | 2.46x |
+| banking77 | choice | 333.6 | 149.3 | 2.23x |
+| mnli | choice | 153.8 | 76.7 | 2.01x |
+| chaosnli | choice | 78.1 | 61.4 | 1.27x |
+| total | | 929.8 | 428.5 | 2.17x |
+
+Two passes became one, so about 2x is the expected gain. Configs above that are machine
+load: the old run shared the machine with a Laya suite on CPU. chaosnli has no validation
+split and borrows mnli's calibrator; its old two test passes became one, and a 1.27x speedup
+is load noise in a 60-second config. A full 22-config suite with dumps should take about 35
+to 40 minutes instead of 75.
