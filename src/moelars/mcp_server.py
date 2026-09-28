@@ -29,7 +29,9 @@ classification benchmarks; treat them as well-ordered confidence, and check high
 Inputs are capped (the error says by how much when a text is too long): send the relevant
 excerpt, not a whole repository. For a decision that has its own calibrator (listed by
 moelars_status under "calibrators"), pass its name as `decision`; its probabilities are then
-calibrated on that decision's own labeled history."""
+calibrated on that decision's own labeled history. If that calibrator was fitted with numeric
+evidence (such as ci_failure's history rates), pass the same names to moelars_check as
+`features`; without all of them the plain calibration is used."""
 
 
 class CheckResult(BaseModel):
@@ -44,8 +46,14 @@ class ClassifyResult(BaseModel):
     model: str
 
 
-def _with_decision(request: dict[str, Any], decision: str | None) -> dict[str, Any]:
-    return {**request, "moelars": {"calibrator": decision}} if decision else request
+def _with_decision(request: dict[str, Any], decision: str | None,
+                   features: dict[str, dict[str, float]] | None = None) -> dict[str, Any]:
+    extensions: dict[str, Any] = {}
+    if decision:
+        extensions["calibrator"] = decision
+    if features:
+        extensions["features"] = features
+    return {**request, "moelars": extensions} if extensions else request
 
 
 def build_mcp(decide: Decide, status: Status) -> Any:
@@ -63,12 +71,16 @@ def build_mcp(decide: Decide, status: Status) -> Any:
             raise ToolError(str(error)) from error
 
     @server.tool(name="moelars_check", title="Check a claim against a text")
-    async def check(text: str, claim: str, decision: str | None = None) -> CheckResult:
+    async def check(text: str, claim: str, decision: str | None = None,
+                    features: dict[str, float] | None = None) -> CheckResult:
         """Probability that `claim` is true of `text`, for example text = a CI log and
         claim = "The build failed because of a failing test". `decision` names a calibrator
-        from moelars_status; use the claim wording that calibrator was fitted with."""
+        from moelars_status; use the claim wording that calibrator was fitted with.
+        `features` is numeric evidence by name, fused with the model when the calibrator was
+        fitted on exactly those names (all of them must be given)."""
         response = await run(_with_decision(
-            {"state": text, "questions": {"q": {"type": "noul", "instructions": claim}}}, decision))
+            {"state": text, "questions": {"q": {"type": "noul", "instructions": claim}}}, decision,
+            {"q": features} if features else None))
         return CheckResult(p_yes=response["answers"]["q"]["noul"], model=response["model"])
 
     @server.tool(name="moelars_classify", title="Pick one option for a text")

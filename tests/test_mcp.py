@@ -218,3 +218,32 @@ def test_named_calibrator_dir_reaches_the_mcp_tools(tmp_path, monkeypatch):
     assert bad.is_error and "ci_failure" in bad.content[0].text
     got = status.structured_content
     assert got.get("result", got)["calibrators"] == ["ci_failure"]
+
+
+def test_check_features_reach_the_fitted_fusion(tmp_path, monkeypatch):
+    from moelars.calibration import Calibrator
+    from moelars.cli import load_named_calibrators
+
+    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    fusion = {"noul": {"features": ["job_rerun_rate"], "weights": [1.0, -6.0], "bias": 0.0}}
+    Calibrator(platt={"noul": (1.0, 0.0)}, fusion=fusion).save(tmp_path / "ci_failure.json")
+    engine = Engine(MockBackend(), named_calibrators=load_named_calibrators(str(tmp_path)))
+    app = create_app(engine, mcp=True)
+
+    async def calls():
+        http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app))
+        async with Client(streamable_http_client("http://127.0.0.1:8600/mcp", http_client=http)) as c:
+            claim = {"text": TEXT, "claim": "A test failed", "decision": "ci_failure"}
+            plain = await c.call_tool("moelars_check", claim)
+            flaky = await c.call_tool("moelars_check", {**claim, "features": {"job_rerun_rate": 0.9}})
+            steady = await c.call_tool("moelars_check", {**claim, "features": {"job_rerun_rate": 0.0}})
+            partial = await c.call_tool("moelars_check", {**claim, "features": {"other": 1.0}})
+        return plain, flaky, steady, partial
+
+    with TestClient(app):
+        plain, flaky, steady, partial = anyio.run(calls)
+    p = {name: r.structured_content["p_yes"] for name, r in
+         {"plain": plain, "flaky": flaky, "steady": steady, "partial": partial}.items()}
+    assert p["flaky"] < p["steady"]  # a job reruns usually fix is less likely a code change
+    assert p["steady"] == pytest.approx(p["plain"])  # weight 1 on the logit, bias 0, feature 0: same as Platt (1, 0)
+    assert p["partial"] == pytest.approx(p["plain"])  # a fusion needs all its names; otherwise plain calibration
