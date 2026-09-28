@@ -740,8 +740,8 @@ difference is 0.
 | chaosnli | choice | 78.1 | 61.4 | 1.27x |
 | total | | 929.8 | 428.5 | 2.17x |
 
-Two passes became one, so about 2x is the expected gain. Configs above that are machine
-load: the old run shared the machine with a Laya suite on CPU. chaosnli has no validation
-split and borrows mnli's calibrator; its old two test passes became one, and a 1.27x speedup
-is load noise in a 60-second config. A full 22-config suite with dumps should take about 35
+Two passes became one, so about 2x is the expected gain. Neither run was a quiet-machine
+measurement, so the spread around 2x (2.69x on boolq, 1.27x on chaosnli, which has no
+validation split and went from two test passes to one) is other load on the machine, not
+the code; quote latency only from `scripts/load_cost.py`. A full 22-config suite with dumps should take about 35
 to 40 minutes instead of 75.
