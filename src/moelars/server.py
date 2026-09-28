@@ -89,7 +89,8 @@ def create_app(engine: Engine | LazyEngine, max_body_bytes: int = MAX_BODY_BYTES
     async def status() -> dict[str, Any]:
         return {"model": holder.model_id, "loaded": holder.loaded, "loads": holder.loads,
                 "idle_unload_s": holder.idle_unload, "idle_s": round(holder.idle_for(), 1),
-                "waiting": inference.statistics().tasks_waiting, "version": holder.version or __version__}
+                "waiting": inference.statistics().tasks_waiting, "version": holder.version or __version__,
+                "calibrators": holder.calibrator_names}
 
     mcp_server = None
     if mcp:

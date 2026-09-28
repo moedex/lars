@@ -87,12 +87,18 @@ class Engine:
         head: PointerHeadScorer | None = None,
         max_rows: int | None = DEFAULT_MAX_ROWS,
         max_input_tokens: int | None = DEFAULT_MAX_INPUT_TOKENS,
+        named_calibrators: dict[str, Calibrator] | None = None,
     ) -> None:
-        """`max_rows` and `max_input_tokens` bound each `evaluate` call; None disables a budget."""
+        """`max_rows` and `max_input_tokens` bound each `evaluate` call; None disables a budget.
+
+        `named_calibrators` are calibrators fitted per decision, chosen by a request with
+        `moelars.calibrator` (every question) or `moelars.calibrators` (per question id);
+        other questions use `calibrator`."""
         self.backend = backend
         self.max_rows = max_rows
         self.max_input_tokens = max_input_tokens
         self.calibrator = calibrator or Calibrator()
+        self.named_calibrators = dict(named_calibrators or {})
         self.version = version
         self.head = head
         if head is not None and not hasattr(backend, "label_logits_with_features"):
@@ -114,6 +120,22 @@ class Engine:
                 release_date="2026-09-22",
             ),
         ]
+
+    def calibrators_for(self, request: SystemOneRequest) -> dict[str, Calibrator]:
+        """The calibrator each question uses: its named one if the request names one, else the default."""
+        options = request.moelars
+        unknown = sorted({options.calibrator, *options.calibrators.values()} - {None, *self.named_calibrators})
+        if unknown:
+            known = ", ".join(sorted(self.named_calibrators)) or "none are loaded"
+            raise ValueError(f"unknown calibrator {', '.join(map(repr, unknown))}; known: {known}")
+        extra = sorted(set(options.calibrators) - set(request.questions))
+        if extra:
+            raise ValueError(f"moelars.calibrators names questions not in the request: {', '.join(extra)}")
+        chosen: dict[str, Calibrator] = {}
+        for qid in request.questions:
+            name = options.calibrators.get(qid, options.calibrator)
+            chosen[qid] = self.named_calibrators[name] if name else self.calibrator
+        return chosen
 
     def evaluate(self, request: SystemOneRequest) -> SystemOneResponse:
         rows, usage = self._plan(request, self.model_id)
@@ -148,6 +170,7 @@ class Engine:
 
     def _score(self, request: SystemOneRequest, rows: list[Row]) -> list[Scored]:
         base_state = render_content(request.state)
+        calibrators = self.calibrators_for(request)
         template = self.backend.template()
         groups: dict[str, list[tuple[int, str]]] = defaultdict(list)
         for index, row in enumerate(rows):
@@ -170,7 +193,7 @@ class Engine:
                     logits.append(self.head.adjust(z, self.head.project(h_ans), self.head.project(h_opt), kind))
             for (index, _), row_logits in zip(members, logits, strict=True):
                 row = rows[index]
-                temperature = self.calibrator.temperature_for(row.kind)
+                temperature = calibrators[row.question_id].temperature_for(row.kind)
                 scored[index] = Scored(row, softmax(row_logits, temperature), np.asarray(row_logits))
         return [s for s in scored if s is not None]
 
@@ -183,18 +206,21 @@ class Engine:
 
         answers: dict[str, Answer] = {}
         options = request.moelars
+        calibrators = self.calibrators_for(request)
         for qid, question in request.questions.items():
+            cal = calibrators[qid]
             items = by_question[qid]
             base = [s for s in items if s.row.variant == "base" or s.row.variant.startswith("base:")]
             perms = [s for s in items if s.row.variant.startswith("perm:")]
             ablations = [s for s in items if s.row.variant.startswith("ablate:")]
 
             if question.type == "noul":
-                p_yes = self.noul_prob(self._yes_logit(base[0]), features=options.features.get(qid))
+                p_yes = self.noul_prob(self._yes_logit(base[0]), features=options.features.get(qid), calibrator=cal)
                 answer: Answer = NoulAnswer(noul=round(p_yes, 4))
                 if options.abstain_margin is not None:
                     answer.abstain = abs(p_yes - 0.5) * 2 < options.abstain_margin
-                effects = [(s.row.ablated_span, abs(self.noul_prob(self._yes_logit(s)) - p_yes)) for s in ablations]
+                effects = [(s.row.ablated_span, abs(self.noul_prob(self._yes_logit(s), calibrator=cal) - p_yes))
+                           for s in ablations]
                 answer.evidence = self._evidence(effects, options.explain)
 
             elif question.type == "choice":
@@ -235,7 +261,7 @@ class Engine:
                 per_option: dict[str, float] = {}
                 for s in base:
                     key = s.row.variant.split(":", 1)[1]
-                    per_option[key] = round(self.noul_prob(self._yes_logit(s), kind="multi"), 4)
+                    per_option[key] = round(self.noul_prob(self._yes_logit(s), kind="multi", calibrator=cal), 4)
                 answer = MultiAnswer(
                     probabilities=per_option,
                     selected=[k for k, p in per_option.items() if p >= 0.5],
@@ -245,7 +271,7 @@ class Engine:
                 for s in ablations:
                     _, unit, key = s.row.variant.split(":", 2)
                     spans[unit] = s.row.ablated_span
-                    ablated = self.noul_prob(self._yes_logit(s), kind="multi")
+                    ablated = self.noul_prob(self._yes_logit(s), kind="multi", calibrator=cal)
                     by_unit[unit].append(abs(ablated - per_option.get(key, 0.0)))
                 effects = [(spans[unit], float(np.mean(values))) for unit, values in by_unit.items()]
                 answer.evidence = self._evidence(effects, options.explain)
@@ -258,19 +284,22 @@ class Engine:
         """Raw yes-minus-no logit for a two-label row."""
         return float(item.logits[0] - item.logits[1])
 
-    def noul_prob(self, yes_logit: float, kind: str = "noul", features: dict[str, float] | None = None) -> float:
+    def noul_prob(self, yes_logit: float, kind: str = "noul", features: dict[str, float] | None = None,
+                  calibrator: Calibrator | None = None) -> float:
         """P(yes) from the raw yes-minus-no logit.
 
         With caller evidence and a fusion fitted on the same feature names, P(yes) is the
         fused logistic. Otherwise a fitted Platt pair (a, b) gives sigmoid(a * z + b), or the
         kind's temperature applies: sigmoid(z / T), the special case a = 1/T, b = 0.
+        `calibrator` overrides the engine's default (a named, per-decision one).
         """
-        fusion = self.calibrator.fusion_for(kind, features)
+        cal = calibrator or self.calibrator
+        fusion = cal.fusion_for(kind, features)
         if fusion is not None:
             return fused_probability(fusion, yes_logit, features or {})
-        platt = self.calibrator.platt_for(kind)
+        platt = cal.platt_for(kind)
         if platt is None:
-            return sigmoid(yes_logit / self.calibrator.temperature_for(kind))
+            return sigmoid(yes_logit / cal.temperature_for(kind))
         a, b = platt
         return sigmoid(a * yes_logit + b)
 
@@ -426,6 +455,8 @@ class EnsembleEngine:
         return self.members[0].models()
 
     def evaluate(self, request: SystemOneRequest) -> SystemOneResponse:
+        if request.moelars.calibrator or request.moelars.calibrators:
+            raise ValueError("named calibrators are not supported with several adapters yet")
         rows, usage = self.members[0]._plan(request, self.model_id)
         per_member = [m._reduce(request, m._score(request, rows)) for m in self.members]
         answers = {qid: _average([a[qid] for a in per_member], request.moelars.abstain_margin)

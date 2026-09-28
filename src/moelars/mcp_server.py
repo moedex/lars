@@ -27,7 +27,9 @@ does this issue belong to, is this message urgent. Weak on world knowledge (it i
 model), so do not ask it facts the text does not contain. Probabilities were calibrated on
 classification benchmarks; treat them as well-ordered confidence, and check high-stakes calls.
 Inputs are capped (the error says by how much when a text is too long): send the relevant
-excerpt, not a whole repository."""
+excerpt, not a whole repository. For a decision that has its own calibrator (listed by
+moelars_status under "calibrators"), pass its name as `decision`; its probabilities are then
+calibrated on that decision's own labeled history."""
 
 
 class CheckResult(BaseModel):
@@ -40,6 +42,10 @@ class ClassifyResult(BaseModel):
     probabilities: dict[str, float] = Field(description="Probability of every option; they sum to 1")
     confidence: float = Field(description="How clearly the top option wins, 0 to 1")
     model: str
+
+
+def _with_decision(request: dict[str, Any], decision: str | None) -> dict[str, Any]:
+    return {**request, "moelars": {"calibrator": decision}} if decision else request
 
 
 def build_mcp(decide: Decide, status: Status) -> Any:
@@ -57,20 +63,24 @@ def build_mcp(decide: Decide, status: Status) -> Any:
             raise ToolError(str(error)) from error
 
     @server.tool(name="moelars_check", title="Check a claim against a text")
-    async def check(text: str, claim: str) -> CheckResult:
+    async def check(text: str, claim: str, decision: str | None = None) -> CheckResult:
         """Probability that `claim` is true of `text`, for example text = a CI log and
-        claim = "The build failed because of a failing test"."""
-        response = await run({"state": text, "questions": {"q": {"type": "noul", "instructions": claim}}})
+        claim = "The build failed because of a failing test". `decision` names a calibrator
+        from moelars_status; use the claim wording that calibrator was fitted with."""
+        response = await run(_with_decision(
+            {"state": text, "questions": {"q": {"type": "noul", "instructions": claim}}}, decision))
         return CheckResult(p_yes=response["answers"]["q"]["noul"], model=response["model"])
 
     @server.tool(name="moelars_classify", title="Pick one option for a text")
-    async def classify(text: str, question: str, options: dict[str, str]) -> ClassifyResult:
+    async def classify(text: str, question: str, options: dict[str, str],
+                       decision: str | None = None) -> ClassifyResult:
         """Which one of `options` fits `text` best. `options` maps each option's name to a short
-        description, e.g. {"frontend": "UI, CSS, browser code", "backend": "APIs, database"}."""
+        description, e.g. {"frontend": "UI, CSS, browser code", "backend": "APIs, database"}.
+        `decision` names a calibrator from moelars_status, as for moelars_check."""
         if len(options) < 2:
             raise ToolError("give at least two options")
-        response = await run({"state": text, "questions": {
-            "q": {"type": "choice", "instructions": question, "criteria": options}}})
+        response = await run(_with_decision({"state": text, "questions": {
+            "q": {"type": "choice", "instructions": question, "criteria": options}}}, decision))
         answer = response["answers"]["q"]
         return ClassifyResult(choice=answer["choice"], probabilities=answer["probabilities"],
                               confidence=answer["confidence"], model=response["model"])

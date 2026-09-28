@@ -169,3 +169,24 @@ def test_structured_state_and_criteria(engine):
     )
     answer = engine.evaluate(request).answers["refund"]
     assert isinstance(answer, NoulAnswer)
+
+
+def test_named_calibrators_apply_per_question_and_unknown_names_are_refused():
+    from moelars.calibration import Calibrator
+
+    sharp = Calibrator(platt={"noul": (4.0, 0.0)}, temperatures={"noul": 1.0, "choice": 0.25})
+    engine = Engine(MockBackend(), named_calibrators={"ci_failure": sharp})
+    body = {"state": "The build failed: 3 tests errored.", "questions": {
+        "a": {"type": "noul", "instructions": "A test failed"},
+        "b": {"type": "noul", "instructions": "A test failed"},
+        "c": {"type": "choice", "instructions": "Area?", "criteria": {"x": "X", "y": "Y"}}}}
+    plain = engine.evaluate(SystemOneRequest.model_validate(body)).answers
+    named = engine.evaluate(SystemOneRequest.model_validate(
+        {**body, "moelars": {"calibrators": {"a": "ci_failure"}}})).answers
+    assert named["b"].noul == plain["b"].noul  # untouched question keeps the default
+    assert plain["a"].noul < named["a"].noul  # Platt slope 4 sharpens a 0.93 towards 1
+    every = engine.evaluate(SystemOneRequest.model_validate({**body, "moelars": {"calibrator": "ci_failure"}})).answers
+    assert max(every["c"].probabilities.values()) > max(plain["c"].probabilities.values())  # temperature 0.25
+    for bad in ({"calibrator": "nope"}, {"calibrators": {"zz": "ci_failure"}}):
+        with pytest.raises(ValueError):
+            engine.evaluate(SystemOneRequest.model_validate({**body, "moelars": bad}))

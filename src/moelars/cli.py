@@ -40,6 +40,7 @@ def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
     budgets = {}
     if hasattr(args, "max_rows"):  # serve only; eval and calibrate score one row per question
         budgets = {"max_rows": args.max_rows or None, "max_input_tokens": args.max_input_tokens or None}
+    named = load_named_calibrators(getattr(args, "calibration_dir", None))
     backend = load_backend(args.backend, model=args.model, template=args.template,
                            adapter=adapters if len(adapters) > 1 else (adapters[0] if adapters else None))
     if len(adapters) > 1:
@@ -47,6 +48,8 @@ def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
             raise SystemExit("a pointer head cannot be combined with several adapters")
         if len(calibrators) not in (0, len(adapters)):
             raise SystemExit(f"give one --calibration per --adapter ({len(adapters)}), or none")
+        if named:
+            raise SystemExit("--calibration-dir is not supported with several adapters yet")
         return EnsembleEngine(backend, calibrators or [None] * len(adapters), version=__version__, **budgets)
     if len(calibrators) > 1:
         raise SystemExit("several --calibration files need as many --adapter directories")
@@ -56,7 +59,19 @@ def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
 
         head = PointerHeadScorer.load(args.head, args.projection or str(args.head).replace(".npz", ".projection.npy"))
     return Engine(backend, calibrator=calibrators[0] if calibrators else None, version=__version__, head=head,
-                  **budgets)
+                  named_calibrators=named, **budgets)
+
+
+def load_named_calibrators(directory: str | None) -> dict[str, Calibrator]:
+    """Every `<name>.json` in `directory`, keyed by name: the per-decision calibrators a request can choose."""
+    if not directory:
+        return {}
+    from pathlib import Path
+
+    path = Path(directory).expanduser()
+    if not path.is_dir():
+        raise SystemExit(f"--calibration-dir {directory} is not a directory")
+    return {f.stem: Calibrator.load(f) for f in sorted(path.glob("*.json"))}
 
 
 def _add_backend_args(parser: argparse.ArgumentParser) -> None:
@@ -158,6 +173,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--max-input-tokens", type=int, default=DEFAULT_MAX_INPUT_TOKENS,
                        help="input tokens one request may need; 0 for no limit")
     serve.add_argument("--max-body-bytes", type=int, default=1_000_000, help="largest request body accepted")
+    serve.add_argument("--calibration-dir", default=None,
+                       help="directory of per-decision calibrators (<name>.json); a request picks one with "
+                            "moelars.calibrator or moelars.calibrators")
     serve.add_argument("--mcp", action="store_true", help="also serve MCP over Streamable HTTP at /mcp "
                                                            "(needs moelars[mcp])")
     serve.add_argument("--idle-unload", default="0", help="free the model after this long without a request "

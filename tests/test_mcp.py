@@ -191,3 +191,30 @@ def test_service_plist_and_key(tmp_path, monkeypatch):
     assert len(key) >= 32 and key not in json.dumps(plist)
     assert stat.S_IMODE(os.stat(key_file).st_mode) == 0o600
     assert service.ensure_api_key(key_file).read_text().strip() == key  # an existing key is kept
+
+
+def test_named_calibrator_dir_reaches_the_mcp_tools(tmp_path, monkeypatch):
+    from moelars.calibration import Calibrator
+    from moelars.cli import load_named_calibrators
+
+    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    Calibrator(platt={"noul": (4.0, 0.0)}).save(tmp_path / "ci_failure.json")
+    engine = Engine(MockBackend(), named_calibrators=load_named_calibrators(str(tmp_path)))
+    app = create_app(engine, mcp=True)
+
+    async def calls():
+        http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app))
+        async with Client(streamable_http_client("http://127.0.0.1:8600/mcp", http_client=http)) as c:
+            claim = {"text": TEXT, "claim": "A test failed"}
+            plain = await c.call_tool("moelars_check", claim)
+            named = await c.call_tool("moelars_check", {**claim, "decision": "ci_failure"})
+            bad = await c.call_tool("moelars_check", {**claim, "decision": "nope"})
+            status = await c.call_tool("moelars_status", {})
+        return plain, named, bad, status
+
+    with TestClient(app):  # runs the lifespan, which starts the MCP session manager
+        plain, named, bad, status = anyio.run(calls)
+    assert named.structured_content["p_yes"] != plain.structured_content["p_yes"]
+    assert bad.is_error and "ci_failure" in bad.content[0].text
+    got = status.structured_content
+    assert got.get("result", got)["calibrators"] == ["ci_failure"]

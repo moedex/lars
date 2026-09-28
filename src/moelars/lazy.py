@@ -37,6 +37,7 @@ class LazyEngine:
         self._last_used = clock()
         self.model_id: str | None = engine.model_id if engine is not None else None
         self.version: str | None = getattr(engine, "version", None)
+        self.calibrator_names: list[str] = sorted(getattr(engine, "named_calibrators", {}) or {})
         self.loads = 0
 
     @property
@@ -50,6 +51,7 @@ class LazyEngine:
             self.loads += 1
             self.model_id = self._engine.model_id
             self.version = getattr(self._engine, "version", None)
+            self.calibrator_names = sorted(getattr(self._engine, "named_calibrators", {}) or {})
         self._last_used = self._clock()
         return self._engine
 

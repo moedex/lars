@@ -63,6 +63,8 @@ def serve_argv(args: argparse.Namespace) -> list[str]:
         argv += ["--adapter", _absolute(adapter)]
     for calibration in args.calibration or []:
         argv += ["--calibration", _absolute(calibration)]
+    if args.calibration_dir:
+        argv += ["--calibration-dir", _absolute(args.calibration_dir)]
     return argv
 
 
@@ -242,6 +244,7 @@ def add_parser(sub: Any, add_backend_args: Any) -> None:
     add_backend_args(install)
     install.add_argument("--host", default="127.0.0.1")
     install.add_argument("--port", type=int, default=8600)
+    install.add_argument("--calibration-dir", default=None, help="per-decision calibrators, as for serve")
     install.add_argument("--idle-unload", default="15m", help="free the model after this long idle; 0 keeps it")
     install.add_argument("--process-type", default="Standard", choices=["Standard", "Interactive", "Adaptive"])
     install.add_argument("--skip-cache-check", action="store_true")

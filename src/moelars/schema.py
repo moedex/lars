@@ -123,6 +123,12 @@ class MoelarsOptions(_Strict):
         default_factory=dict,
         description="Named numeric evidence per noul question, fused with the model by a fitted calibration",
     )
+    calibrator: str | None = Field(
+        None, description="Named calibrator (one fitted for this decision) for every question in the request"
+    )
+    calibrators: dict[str, str] = Field(
+        default_factory=dict, description="Named calibrator per question id; overrides `calibrator`"
+    )
 
 
 class SystemOneRequest(BaseModel):
