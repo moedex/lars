@@ -213,3 +213,22 @@ def test_a_run_that_never_beats_the_untrained_model_saves_the_identity(tmp_path)
     assert np.allclose(np.asarray(lora.readout(mx, backend.model, *batch)), before, atol=1e-5)
     fresh = load_adapters(_tiny(seed=3), str(out))
     assert np.allclose(np.asarray(lora.readout(mx, fresh, *batch)), before, atol=1e-5)
+
+
+def test_selection_rows_decide_the_checkpoint_and_every_step_is_kept(tmp_path):
+    """With --select-records, the checkpoint follows macro accuracy on those rows even when held-out
+    Brier gets worse, and every evaluated checkpoint is saved under <out>.steps/."""
+    import json
+
+    backend = _Backend(_tiny(seed=3))
+    flipped = [Record(r.id, r.source, r.kind, r.state, r.question, r.options, r.target[::-1]) for r in _records()]
+    out = tmp_path / "adapter"
+    # Training on the flipped targets worsens held-out Brier on the originals but fits the flipped
+    # selection rows, so selection by held-out Brier would keep the identity and this must not.
+    history = lora.train(backend, flipped * 8, _records(), out, epochs=3, lr=3e-3, rank=4, scale=2.0,
+                         eval_every=0, grad_checkpoint=False, select_records=flipped)
+    assert history[-1]["select"]["macro_acc"] > 0.0
+    assert any(entry.get("selected") for entry in history)
+    assert all("select" in entry and entry["select"]["sources"] == 2 for entry in history)
+    assert json.loads((out / "adapter_config.json").read_text())["moelars"]["improved"] is True
+    assert sorted(p.name for p in (tmp_path / "adapter.steps").iterdir()) == [f"step-{e['step']}" for e in history]

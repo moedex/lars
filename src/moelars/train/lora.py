@@ -3,12 +3,20 @@
 The loss is on the K label logits at the answer position, cross-entropy plus Brier against
 the record's target, not on generated text, so training optimizes exactly what serving
 reads. Choice records get a fresh option order every epoch, so the adapter cannot learn
-letter positions. Whole sources are held out (the same split as the pointer head), and the
-adapter is saved whenever held-out Brier improves on the best so far, starting from the
-untrained model: in-distribution gains are cheap, generalization is what we are buying. If
-no checkpoint beats the untrained model, the saved adapter is the untrained one (the
-backbone exactly), marked `"improved": false`, and the last trained state goes to
-`<out>.last/` for inspection only.
+letter positions. Whole sources are held out (the same split as the pointer head) and
+scored at every evaluation. Which checkpoint becomes the adapter:
+
+- With `--select-records` (the benchmark's validation rows, e.g.
+  `data/train/jev-bench.validation.jsonl`), the one with the best macro accuracy over the
+  selection sources, the metric the suite reports. Held-out Brier on a few sources proved
+  a poor proxy: on the corpus-C experts run it chose a half-epoch checkpoint that was the
+  worst adapter of the run on the suite.
+- Otherwise, the one with the best held-out Brier.
+
+Either way the untrained model is the first candidate. If no checkpoint beats it, the saved
+adapter is the untrained one (the backbone exactly), marked `"improved": false`, and the
+last trained state goes to `<out>.last/` for inspection only. Every evaluated checkpoint is
+also kept in `<out>.steps/step-<n>/`, so a different choice needs no retraining.
 
 Adapters are saved in mlx-lm's format (`adapters.safetensors` plus `adapter_config.json`),
 so `mlx_lm.load(model, adapter_path=...)` and `--adapter` on every moe-LARS entry point load
@@ -148,6 +156,18 @@ def loss_fn(mx: Any, model: Any, ids, lengths, label_ids, kmask, target, brier_w
     return ce + brier_weight * brier
 
 
+def macro_by_source(mx: Any, model: Any, examples: list[Example], batch_tokens: int) -> dict[str, Any]:
+    """Accuracy and Brier per source, and their unweighted means: the suite's macro average."""
+    by_source: dict[str, list[Example]] = {}
+    for example in examples:
+        by_source.setdefault(example.source, []).append(example)
+    per = {source: evaluate(mx, model, group, batch_tokens) for source, group in sorted(by_source.items())}
+    return {"n": len(examples), "sources": len(per),
+            "macro_acc": float(np.mean([r["acc"] for r in per.values()])),
+            "macro_brier": float(np.mean([r["brier"] for r in per.values()])),
+            "per_source": {source: round(r["acc"], 4) for source, r in per.items()}}
+
+
 def evaluate(mx: Any, model: Any, examples: list[Example], batch_tokens: int) -> dict[str, float]:
     from moelars.calibration import ece
 
@@ -252,6 +272,7 @@ def train(
     seed: int = 0,
     meta: dict[str, Any] | None = None,
     keys: list[str] | None = None,
+    select_records: list[Record] | None = None,
 ) -> list[dict[str, Any]]:
     import mlx.core as mx
     import mlx.nn as nn
@@ -264,7 +285,8 @@ def train(
     model = backend.model
     # Labels come in a fixed canonical order, so the first K are the ones the engine uses for
     # a K-option question; only as many as the widest record are needed.
-    labels = assign_labels(max(len(r.options) for r in [*train_records, *heldout_records]), backend.is_single_token)
+    everything = [*train_records, *heldout_records, *(select_records or [])]
+    labels = assign_labels(max(len(r.options) for r in everything), backend.is_single_token)
     stop_router_index_gradients()
     config = add_lora(model, num_layers, rank, scale, dropout, keys)
     config["moelars"] = {**(meta or {}), "lr": lr, "epochs": epochs, "brier_weight": brier_weight,
@@ -284,6 +306,10 @@ def train(
     print(f"trainable parameters: {trainable:,} across {config['num_layers']} blocks", flush=True)
 
     heldout, skipped_heldout = presentations(backend, heldout_records, labels, rng=None, max_tokens=max_tokens)
+    select, _ = presentations(backend, select_records or [], labels, rng=None, max_tokens=max_tokens)
+    if select:
+        print(f"selecting on macro accuracy over {len(select)} rows from "
+              f"{len({e.source for e in select})} sources", flush=True)
     first_epoch, skipped = presentations(backend, train_records, labels, rng=rng, max_tokens=max_tokens)
     steps_per_epoch = len(batches(first_epoch, batch_tokens, rng=None))
     total_steps = max(1, steps_per_epoch * epochs)
@@ -303,8 +329,16 @@ def train(
     history: list[dict[str, Any]] = []
     started = time.perf_counter()
     baseline = evaluate(mx, model, heldout, batch_tokens) if heldout else None
-    print(json.dumps({"step": 0, "heldout": baseline}), flush=True)
-    best = baseline["brier"] if baseline and baseline.get("n") else None
+    baseline_select = macro_by_source(mx, model, select, batch_tokens) if select else None
+    print(json.dumps({"step": 0, "heldout": baseline, "select": baseline_select}), flush=True)
+
+    def score(entry: dict[str, Any] | None, select_entry: dict[str, Any] | None) -> float | None:
+        """Higher is better: macro accuracy on the selection rows, else minus held-out Brier."""
+        if select:
+            return select_entry["macro_acc"] if select_entry else None
+        return -entry["brier"] if entry and entry.get("n") else None
+
+    best = score(baseline, baseline_select)
     step, running, seen = 0, 0.0, 0
 
     def checkpoint(epoch: int) -> None:
@@ -315,12 +349,14 @@ def train(
                                  "peak_memory_gb": round(mx.get_peak_memory() / 1e9, 2)}
         if heldout:
             entry["heldout"] = evaluate(mx, model, heldout, batch_tokens)
-            improved = best is None or entry["heldout"]["brier"] < best
-        else:
-            improved = True
+        if select:
+            entry["select"] = macro_by_source(mx, model, select, batch_tokens)
+        current = score(entry.get("heldout"), entry.get("select"))
+        improved = current is None or best is None or current > best
+        config["moelars"]["improved"] = True
+        save_adapter(model, out.parent / f"{out.name}.steps" / f"step-{step}", config)
         if improved:
-            best = entry["heldout"]["brier"] if heldout else None
-            config["moelars"]["improved"] = True
+            best = current
             save_adapter(model, out, config)
             entry["selected"] = True
         history.append(entry)
@@ -381,6 +417,10 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--keys", choices=sorted(KEY_PRESETS), default="all",
                         help="which layers in each block get LoRA; 'attn' or 'attn+experts' for MoE models")
+    parser.add_argument("--select-records", nargs="+", default=None,
+                        help="choose the checkpoint by macro accuracy over these records' sources "
+                             "(e.g. data/train/jev-bench.validation.jsonl) instead of held-out Brier")
+    parser.add_argument("--select-per-source", type=int, default=100, help="selection rows kept per source")
     parser.add_argument("--out", default="checkpoints/lora")
     args = parser.parse_args()
 
@@ -399,6 +439,18 @@ def main() -> int:
     print(f"records: {len(records)} -> train {len(train_records)} / heldout {len(heldout_records)} "
           f"(held-out sources: {sorted({r.source for r in heldout_records})[:8]}...)", flush=True)
 
+    select_records = None
+    if args.select_records:
+        # A selection row whose state is also a training state would reward memorizing it.
+        seen_states = {json.dumps(r.state, sort_keys=True, default=str) for r in records}
+        per_source: dict[str, list[Record]] = {}
+        for path in args.select_records:
+            for r in read_records(path):
+                if len(r.options) <= args.max_options and \
+                        json.dumps(r.state, sort_keys=True, default=str) not in seen_states:
+                    per_source.setdefault(r.source, []).append(r)
+        select_records = [r for group in per_source.values() for r in group[: args.select_per_source]]
+
     from moelars.backends.mlx import MLXBackend
 
     backend = MLXBackend(args.model)
@@ -406,9 +458,12 @@ def main() -> int:
           scale=args.scale, dropout=args.dropout, num_layers=args.num_layers, brier_weight=args.brier_weight,
           batch_tokens=args.batch_tokens, max_tokens=args.max_tokens, eval_every=args.eval_every,
           grad_checkpoint=not args.no_grad_checkpoint, seed=args.seed, keys=KEY_PRESETS[args.keys],
+          select_records=select_records,
           meta={"model": args.model, "keys": args.keys, "records": args.records, "limit": args.limit,
                 "holdout_fraction": args.holdout_fraction,
-                "heldout_sources": sorted({r.source for r in heldout_records})})
+                "heldout_sources": sorted({r.source for r in heldout_records}),
+                "selection": {"records": args.select_records, "per_source": args.select_per_source}
+                if args.select_records else None})
     return 0
 
 
