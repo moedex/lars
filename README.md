@@ -90,6 +90,28 @@ r = client.system_one(
 print(r.nouls["refund"].noul, r.choices["team"].choice)
 ```
 
+## Run it at login, for coding agents (MCP)
+
+On macOS, `moelars service` runs the server as a launchd agent that starts at login. Coding
+agents reach it over MCP at `/mcp`. The model loads on the first request and unloads after
+15 minutes without one. Details are in `SERVICE.md`.
+
+```bash
+uv tool install '.[mlx,mcp]'                     # a fixed install for the service to run from
+moelars service install --backend mlx --model mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit \
+  --adapter checkpoints/lora-30b-c-s1 --calibration calibration/served/lora-30b-c-s1.json
+moelars service status                           # also: start, stop, restart, logs, uninstall
+claude mcp add --transport http --scope user moelars http://127.0.0.1:8600/mcp \
+  --header "Authorization: Bearer $(cat ~/.config/moelars/api-key)"
+```
+
+The tools are `moelars_check` (the probability that a claim holds for a text),
+`moelars_classify` (one option out of several), `moelars_decide` (a full System One request)
+and `moelars_status`. Clients that only speak stdio run `moelars mcp-bridge`, which holds
+no model and forwards to the service. The service binds localhost, refuses non-local
+`Origin` headers, and requires the key that `install` writes to `~/.config/moelars/api-key`.
+For your own server, `moelars serve --mcp --idle-unload 15m` does the same without launchd.
+
 ## Calibrate on your own data
 
 Raw model logits are not calibrated. Fit temperatures on a labeled set, then serve with them:

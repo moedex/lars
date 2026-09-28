@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv python install ${{ matrix.python }}
-      - run: uv sync --extra dev --python ${{ matrix.python }}
+      - run: uv sync --extra dev --extra mcp --python ${{ matrix.python }}
       - run: uv run ruff check .
       - run: uv run pytest
       - run: uv run moelars eval --backend mock --data evals/samples/support_tickets.jsonl

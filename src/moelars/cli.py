@@ -1,4 +1,4 @@
-"""Command line: serve, eval, calibrate."""
+"""Command line: serve, eval, calibrate, mcp-bridge, service."""
 
 from __future__ import annotations
 
@@ -74,15 +74,48 @@ def _add_backend_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--projection", default=None, help="projection.npy from feature extraction")
 
 
+def _check_local_paths(args: argparse.Namespace) -> None:
+    """Fail at startup, not on the first request, when a local adapter or calibrator is missing."""
+    from pathlib import Path
+
+    from moelars.presets import _is_hub_id
+
+    for path in [*(args.adapter or []), args.head, args.projection]:
+        if path and not _is_hub_id(path) and not Path(path).exists():
+            raise SystemExit(f"not found: {path}")
+    for path in args.calibration or []:
+        if path and not Path(path).exists() and path.count("/") != 2:
+            raise SystemExit(f"not found: {path}")
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    from moelars.lazy import LazyEngine, parse_duration
     from moelars.server import create_app
 
-    engine = _engine_from_args(args)
-    app = create_app(engine, max_body_bytes=args.max_body_bytes)
-    print(f"moe-LARS {__version__} serving {engine.model_id} on http://{args.host}:{args.port}", file=sys.stderr)
+    idle = parse_duration(args.idle_unload)
+    _apply_preset(args)
+    _check_local_paths(args)
+    if idle:
+        # Loaded by the first request, not at startup: a login service costs nothing until used.
+        holder = LazyEngine(lambda: _engine_from_args(args), idle_unload=idle)
+        described = f"{args.backend}:{args.model} (loads on first request, unloads after {idle:.0f}s idle)"
+    else:
+        engine = _engine_from_args(args)
+        holder = LazyEngine(lambda: engine, engine=engine)
+        described = engine.model_id
+    app = create_app(holder, max_body_bytes=args.max_body_bytes, mcp=args.mcp)
+    endpoints = f"http://{args.host}:{args.port}" + (" (MCP at /mcp)" if args.mcp else "")
+    print(f"moe-LARS {__version__} serving {described} on {endpoints}", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    return 0
+
+
+def cmd_mcp_bridge(args: argparse.Namespace) -> int:
+    from moelars.bridge import run_bridge
+
+    run_bridge(args.url, api_key_file=args.api_key_file)
     return 0
 
 
@@ -125,7 +158,21 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--max-input-tokens", type=int, default=DEFAULT_MAX_INPUT_TOKENS,
                        help="input tokens one request may need; 0 for no limit")
     serve.add_argument("--max-body-bytes", type=int, default=1_000_000, help="largest request body accepted")
+    serve.add_argument("--mcp", action="store_true", help="also serve MCP over Streamable HTTP at /mcp "
+                                                           "(needs moelars[mcp])")
+    serve.add_argument("--idle-unload", default="0", help="free the model after this long without a request "
+                       "(900, 15m, 1h) and load it on the next one; 0 keeps it loaded")
     serve.set_defaults(func=cmd_serve)
+
+    bridge = sub.add_parser("mcp-bridge", help="stdio MCP server that forwards to a running `moelars serve`")
+    bridge.add_argument("--url", default="http://127.0.0.1:8600")
+    bridge.add_argument("--api-key-file", default=None,
+                        help="file holding the server's API key (default: MOELARS_API_KEY, then the service's key)")
+    bridge.set_defaults(func=cmd_mcp_bridge)
+
+    from moelars.service import add_parser as add_service_parser
+
+    add_service_parser(sub, _add_backend_args)
 
     ev = sub.add_parser("eval", help="Score a labeled JSONL set")
     _add_backend_args(ev)

@@ -1,8 +1,12 @@
 # moe-LARS as a login service with an MCP endpoint
 
-Status: draft spec, not built. Goal: moe-LARS starts with the Mac, stays out of the way, and
-coding agents (Claude Code, Codex, anything that speaks MCP) can ask it typed questions and
-get calibrated answers back.
+Status: built. The code is in `moelars.mcp_server`, `moelars.lazy`, `moelars.bridge` and
+`moelars.service`, with tests in `tests/test_mcp.py`. Goal: moe-LARS starts with the Mac,
+stays out of the way, and coding agents (Claude Code, Codex, anything that speaks MCP) can
+ask it typed questions and get calibrated answers back.
+
+Decided: start at login, not at boot; unload when idle by default (15 minutes); require an
+API key by default.
 
 ## Shape
 
@@ -73,9 +77,11 @@ You'd rather it use less than 18 GB, and an agent calls it in bursts.
   Measured loads with a warm page cache take 0.8 to 2.9 s, so the first question after an idle
   spell costs about 3 s and the rest cost the usual 0.3 s.
 - `/healthz` and `moelars_status` answer while unloaded, without loading.
-- **Needs verifying on real MLX:** dropping the model and calling `mx.clear_cache()` must
-  actually return the roughly 18 GB to the OS. If MLX holds on to it, unloading means
-  restarting the worker process instead, a larger change.
+- Verified on real MLX (Qwen3.5-4B, 2026-09-28): dropping the engine and calling
+  `mx.clear_cache()` returns every MLX buffer (active memory 2.37 GB to 0). The process
+  footprint went from 3.2 GB to 0.96 GB, the rest being the Python runtime, MLX and the
+  tokenizer. Reloading took 1.4 s. The 30B figure is still to be measured on the running
+  service.
 - `--idle-unload 0` keeps the model resident, for when latency matters more.
 
 ## 4. Autostart with launchd
@@ -167,7 +173,5 @@ None of it blocks the release work, or is blocked by it.
 
 ## Open questions
 
-1. Login start is enough; boot before login isn't needed?
-2. Idle unload by default, at 15 minutes?
-3. Which agents besides Claude Code and Codex should the setup section cover?
-4. A bearer token by default, or localhost with an Origin check only?
+1. Which agents besides Claude Code and Codex should the setup section cover?
+2. `ProcessType`: measure `Standard` against `Interactive` on the 30B.

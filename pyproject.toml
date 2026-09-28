@@ -24,6 +24,7 @@ dev = [
   "ruff>=0.6",
   "typesafe-sdk>=0.7",
 ]
+mcp = ["mcp>=2.2,<3", "httpx>=0.27"]
 
 [project.scripts]
 moelars = "moelars.cli:main"
