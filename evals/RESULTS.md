@@ -801,3 +801,26 @@ chosen on the mean of seen and unseen validation macro (step 4000 of 4333).
 Corpus E as served (one pooled calibrator over all 22 configs' validation rows,
 `calibration/served/lora-30b-e-s0.json`): **0.767 macro, Brier 0.285, ECE 0.082**, against Jev's
 0.733 / 0.349 / 0.113. The login service now serves this adapter.
+
+## 2026-09-29: escalating low-confidence answers to Claude Haiku 4.5
+
+`evals/escalation_check.py` on the corpus-E row dumps (per-config calibration): every test and
+validation row below 0.9 top probability (4,566 of 8,520) was put to `claude-haiku-4-5` through
+the serving path, then blended as the server blends (`weight * one_hot(pick) + (1 - weight) * local`).
+
+| escalate below (weight 0.8) | test acc | test Brier | test rows escalated |
+|---|---|---|---|
+| never (local only) | **0.767** | **0.282** | 0% |
+| 0.5 | 0.761 | 0.337 | 17% |
+| 0.8 (the first serving default) | 0.750 | 0.388 | 43% |
+| 0.9 | 0.744 | 0.397 | 54% |
+
+- Escalating everything below a threshold hurts at every threshold. On the rows moe-LARS is
+  unsure of, Haiku is right less often than moe-LARS (0.554 against 0.595 below 0.9): those rows
+  are hard for both, and Haiku does not know each benchmark's label conventions (go_emotions
+  -0.150 at 0.5). A one-hot blend also wrecks calibration; weight 0.5 is better (0.761, Brier 0.299)
+  but still below local.
+- Haiku helps where the question needs knowledge: mmlu, stsb, sst5, arc_challenge, strategyqa.
+  Choosing a threshold and weight per config on validation gives 0.773 on test (Brier 0.288, 17.5%
+  escalated), about +0.6 over local, from mmlu +0.060, sst5 +0.050, stsb +0.035; a few chosen
+  policies lose on test (massive -0.025). Escalation is a per-decision tool, not a default.
