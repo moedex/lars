@@ -6,6 +6,9 @@
 - GET  /healthz     no auth, never loads the model
 - /mcp              MCP over Streamable HTTP, with `mcp=True` (`moelars.mcp_server`)
 
+With an `escalator` (`moelars.escalate`), answers below its confidence threshold are also put
+to a hosted model after the local pass, outside the inference queue.
+
 Errors use the `{message, error_type}` shape. When an API key is configured
 (MOELARS_API_KEY, or MOELARS_API_KEY_FILE naming a file that holds it), /v1/ and /mcp
 requests must carry `Authorization: Bearer <key>`. A request whose `Origin` header is not
@@ -79,26 +82,32 @@ MAX_BODY_BYTES = 1_000_000
 
 
 def create_app(engine: Engine | LazyEngine, max_body_bytes: int = MAX_BODY_BYTES, mcp: bool = False,
-               sweep_seconds: float = SWEEP_SECONDS) -> FastAPI:
+               sweep_seconds: float = SWEEP_SECONDS, escalator: Any | None = None,
+               escalation_note: str | None = None) -> FastAPI:
     holder = engine if isinstance(engine, LazyEngine) else LazyEngine(lambda: engine, engine=engine)
     inference = anyio.CapacityLimiter(1)
 
     async def on_worker(fn: Any, *args: Any) -> Any:
         return await anyio.to_thread.run_sync(lambda: fn(holder.get(), *args), limiter=inference)
 
+    async def answer(request: SystemOneRequest) -> Any:
+        response = await on_worker(lambda e, r: e.evaluate(r), request)
+        return await escalator.apply(request, response) if escalator is not None else response
+
     async def status() -> dict[str, Any]:
         return {"model": holder.model_id, "loaded": holder.loaded, "loads": holder.loads,
                 "idle_unload_s": holder.idle_unload, "idle_s": round(holder.idle_for(), 1),
                 "waiting": inference.statistics().tasks_waiting, "version": holder.version or __version__,
-                "calibrators": holder.calibrator_names}
+                "calibrators": holder.calibrator_names,
+                "escalation": escalator.status() if escalator is not None else {"enabled": False,
+                                                                                "reason": escalation_note}}
 
     mcp_server = None
     if mcp:
         from moelars.mcp_server import build_mcp
 
         async def decide(body: dict[str, Any]) -> dict[str, Any]:
-            request = SystemOneRequest.model_validate(body)
-            response = await on_worker(lambda e, r: e.evaluate(r), request)
+            response = await answer(SystemOneRequest.model_validate(body))
             return response.model_dump(exclude_none=True)
 
         mcp_server = build_mcp(decide, status)
@@ -164,7 +173,7 @@ def create_app(engine: Engine | LazyEngine, max_body_bytes: int = MAX_BODY_BYTES
 
     @app.post("/v1/systemone")
     async def system_one(request: SystemOneRequest):
-        response = await on_worker(lambda e, r: e.evaluate(r), request)
+        response = await answer(request)
         return JSONResponse(content=response.model_dump(exclude_none=True))
 
     return app

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 M30 = "mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit"
+M4 = "mlx-community/Qwen3-4B-Instruct-2507-4bit"
 CALIBRATION_FILE = "moelars-calibration.json"
 
 
@@ -29,7 +30,12 @@ class Preset:
         return [f"{adapter}/{CALIBRATION_FILE}" for adapter in self.adapters]
 
 
+# Two tiers. The 30B-A3B runs about 3B parameters per token, so it is nearly as fast as the 4B;
+# what it costs is memory (about 18 GB resident against about 3 GB). Pick the smallest tier whose
+# evaluation on your decision clears your bar; `serve --escalate` covers questions neither knows.
 PRESETS: dict[str, Preset] = {
+    "4b": Preset("mlx", M4, ("moedex/moelars-qwen3-4b-lora",),
+                 "Qwen3-4B 4-bit with its LoRA and pooled calibrator: about 3 GB, for small machines"),
     "30b": Preset("mlx", M30, ("moedex/moelars-qwen3-30b-a3b-lora-attn",),
                   "Qwen3-30B-A3B 4-bit with the attention LoRA and its pooled calibrator"),
 }

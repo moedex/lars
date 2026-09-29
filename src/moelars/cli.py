@@ -120,11 +120,28 @@ def cmd_serve(args: argparse.Namespace) -> int:
         engine = _engine_from_args(args)
         holder = LazyEngine(lambda: engine, engine=engine)
         described = engine.model_id
-    app = create_app(holder, max_body_bytes=args.max_body_bytes, mcp=args.mcp)
+    escalator, note = _escalator_from_args(args)
+    print(f"escalation: {note}", file=sys.stderr)
+    app = create_app(holder, max_body_bytes=args.max_body_bytes, mcp=args.mcp, escalator=escalator,
+                     escalation_note=note)
     endpoints = f"http://{args.host}:{args.port}" + (" (MCP at /mcp)" if args.mcp else "")
     print(f"moe-LARS {__version__} serving {described} on {endpoints}", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
+
+
+def _escalator_from_args(args: argparse.Namespace):
+    """The escalator and a one-line note. The key is resolved here, once: without one, nothing is escalated."""
+    if not args.escalate:
+        return None, "off (start with --escalate to send low-confidence answers to a hosted model)"
+    from moelars.escalate import Escalator, resolve_api_key
+
+    key = resolve_api_key()
+    if not key:
+        return None, ("off: --escalate was given but no API key was found (ANTHROPIC_API_KEY, "
+                      "MOELARS_ANTHROPIC_KEY_FILE, or ~/.config/moelars/anthropic-key)")
+    escalator = Escalator(key, model=args.escalate_model, below=args.escalate_below, weight=args.escalate_weight)
+    return escalator, f"on: answers below {args.escalate_below} also go to {args.escalate_model}"
 
 
 def cmd_mcp_bridge(args: argparse.Namespace) -> int:
@@ -159,6 +176,18 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     return 0
 
 
+def add_escalation_args(parser: argparse.ArgumentParser) -> None:
+    from moelars.escalate import DEFAULT_BELOW, DEFAULT_MODEL, DEFAULT_WEIGHT
+
+    parser.add_argument("--escalate", action="store_true",
+                        help="send answers below --escalate-below to a hosted Claude model (needs an API key at "
+                             "startup and moelars[escalate]); the state text leaves the machine for those")
+    parser.add_argument("--escalate-model", default=DEFAULT_MODEL)
+    parser.add_argument("--escalate-below", type=float, default=DEFAULT_BELOW)
+    parser.add_argument("--escalate-weight", type=float, default=DEFAULT_WEIGHT,
+                        help="weight of the hosted pick in the served probabilities")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="moelars", description="Moe Limited but Accurate Response System")
     parser.add_argument("--version", action="version", version=f"moelars {__version__}")
@@ -178,6 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
                             "moelars.calibrator or moelars.calibrators")
     serve.add_argument("--mcp", action="store_true", help="also serve MCP over Streamable HTTP at /mcp "
                                                            "(needs moelars[mcp])")
+    add_escalation_args(serve)
     serve.add_argument("--idle-unload", default="0", help="free the model after this long without a request "
                        "(900, 15m, 1h) and load it on the next one; 0 keeps it loaded")
     serve.set_defaults(func=cmd_serve)

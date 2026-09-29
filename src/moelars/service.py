@@ -65,6 +65,9 @@ def serve_argv(args: argparse.Namespace) -> list[str]:
         argv += ["--calibration", _absolute(calibration)]
     if args.calibration_dir:
         argv += ["--calibration-dir", _absolute(args.calibration_dir)]
+    if args.escalate:
+        argv += ["--escalate", "--escalate-model", args.escalate_model, "--escalate-below", str(args.escalate_below),
+                 "--escalate-weight", str(args.escalate_weight)]
     return argv
 
 
@@ -81,6 +84,8 @@ def build_plist(program: list[str], process_type: str = "Standard", api_key_file
         "EnvironmentVariables": {
             "HF_HUB_OFFLINE": "1",
             "MOELARS_API_KEY_FILE": str(api_key_file),
+            # Read only with --escalate; the key itself stays in the file, never in the plist.
+            "MOELARS_ANTHROPIC_KEY_FILE": str(api_key_file.parent / "anthropic-key"),
             "MOELARS_MLX_CACHE_GB": "4",
             "PYTHONUNBUFFERED": "1",
         },
@@ -266,6 +271,9 @@ def add_parser(sub: Any, add_backend_args: Any) -> None:
     install.add_argument("--host", default="127.0.0.1")
     install.add_argument("--port", type=int, default=8600)
     install.add_argument("--calibration-dir", default=None, help="per-decision calibrators, as for serve")
+    from moelars.cli import add_escalation_args
+
+    add_escalation_args(install)
     install.add_argument("--idle-unload", default="15m", help="free the model after this long idle; 0 keeps it")
     install.add_argument("--process-type", default="Standard", choices=["Standard", "Interactive", "Adaptive"])
     install.add_argument("--skip-cache-check", action="store_true")

@@ -129,6 +129,12 @@ class MoelarsOptions(_Strict):
     calibrators: dict[str, str] = Field(
         default_factory=dict, description="Named calibrator per question id; overrides `calibrator`"
     )
+    escalate: bool | None = Field(
+        None, description="False keeps this request local even when the server escalates low-confidence answers"
+    )
+    escalate_below: float | None = Field(
+        None, ge=0.0, le=1.0, description="Escalate answers whose top probability is below this (server default)"
+    )
 
 
 class SystemOneRequest(BaseModel):
@@ -170,6 +176,7 @@ class NoulAnswer(BaseModel):
     noul: float
     abstain: bool | None = None
     evidence: list[Evidence] | None = None
+    escalated: dict[str, str] | None = None
 
 
 class ChoiceAnswer(BaseModel):
@@ -180,6 +187,7 @@ class ChoiceAnswer(BaseModel):
     order_sensitivity: float | None = None
     abstain: bool | None = None
     evidence: list[Evidence] | None = None
+    escalated: dict[str, str] | None = None
 
 
 class ScoreAnswer(BaseModel):
@@ -190,6 +198,7 @@ class ScoreAnswer(BaseModel):
     confidence: float
     abstain: bool | None = None
     evidence: list[Evidence] | None = None
+    escalated: dict[str, str] | None = None
 
 
 class MultiAnswer(BaseModel):

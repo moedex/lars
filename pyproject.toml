@@ -25,6 +25,9 @@ dev = [
   "typesafe-sdk>=0.7",
 ]
 mcp = ["mcp>=2.2,<3", "httpx>=0.27"]
+escalate = [
+    "anthropic>=1.0",
+]
 
 [project.scripts]
 moelars = "moelars.cli:main"
