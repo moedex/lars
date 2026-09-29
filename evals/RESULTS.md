@@ -776,3 +776,24 @@ Split by whether corpus D trains on a config (paired bootstrap over those config
   from the same sources: accuracy 0.755 against 0.749, Brier better), so it is not a reliable
   guard; why the two disagree is not yet known.
 - Without civil_comments corpus D is 0.752 against Jev's 0.733.
+
+## 2026-09-29: corpus E (corpus D diluted back to 40% jev-bench)
+
+Corpus D's 15,185 jev-bench rows plus 14,777 Open-Jev rows (37,962 in all), seed 0, checkpoint
+chosen on the mean of seen and unseen validation macro (step 4000 of 4333).
+
+| system | macro acc | Brier | vs corpus-C s0 (95% CI) |
+|---|---|---|---|
+| corpus C, seed 0 | 0.748 | 0.304 | baseline |
+| corpus D, seed 0 | 0.760 | 0.283 | +1.1 pts (+0.3 to +2.0) |
+| **corpus E, seed 0** | **0.765** | **0.282** | **+1.6 pts (+0.7 to +2.5)** |
+| corpus E + corpus D averaged | 0.766 | 0.277 | +1.8 pts (+0.9 to +2.6) |
+
+| configs, against corpus C | corpus D | corpus E |
+|---|---|---|
+| filled with more rows (15) | +2.6 (+1.7 to +3.6) | +2.3 (+1.4 to +3.3) |
+| not trained on (7) | -2.1 (-3.9 to -0.4) | +0.1 (-1.8 to +2.1) |
+
+- Dilution kept most of the in-distribution gain and removed the transfer loss.
+- Without civil_comments corpus E is 0.757 against Jev's 0.733; it is below Jev on 10 of 22
+  configs (corpus C s1 as served: 14).

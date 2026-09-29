@@ -1,0 +1,11 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.0,
+    "score": 1.6290981196363148,
+    "multi": 1.0
+  },
+  "platt": {},
+  "fusion": {},
+  "fitted_on": "jev-bench/yelp5/validation[:200]"
+}
