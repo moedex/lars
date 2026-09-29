@@ -32,6 +32,9 @@ class Calibrator:
     # Evidence fusion per kind: sigmoid(weights . [logit, *features] + bias), fitted by `fit_fusion`.
     fusion: dict[str, dict[str, Any]] = field(default_factory=dict)
     fitted_on: str | None = None
+    # Per-decision escalation, {"below": p, "weight": w}: set only where a measurement showed the
+    # hosted model helps this decision (`moelars.escalate`). None keeps the decision local.
+    escalate: dict[str, float] | None = None
 
     def temperature_for(self, kind: str) -> float:
         return float(self.temperatures.get(kind, 1.0))
@@ -59,6 +62,7 @@ class Calibrator:
             platt=platt,
             fusion=raw.get("fusion", {}),
             fitted_on=raw.get("fitted_on"),
+            escalate=raw.get("escalate"),
         )
 
 

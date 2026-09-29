@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from moelars.backends.mock import MockBackend
+from moelars.calibration import Calibrator
 from moelars.engine import Engine
 from moelars.escalate import Escalator, resolve_api_key, top_probability
 from moelars.schema import SystemOneRequest
@@ -38,7 +39,7 @@ def _escalator(picks=("no", "y", "2"), fail=False, below=1.01):
 
 def _run(escalator, body=BODY):
     request = SystemOneRequest.model_validate(body)
-    local = Engine(MockBackend()).evaluate(request)
+    local = Engine(MockBackend(), named_calibrators={"knowledge": Calibrator()}).evaluate(request)
     return local, anyio.run(escalator.apply, request, local.model_copy(deep=True))
 
 
@@ -50,6 +51,19 @@ def test_low_confidence_answers_take_the_hosted_pick():
     assert out.answers["area"].choice == "y" and out.answers["area"].escalated == {"model": escalator.model,
                                                                                    "answer": "y"}
     assert abs(sum(out.answers["level"].probabilities.values()) - 1) < 1e-3 and out.answers["level"].score > 1.5
+
+
+def test_only_decisions_that_opt_in_escalate_by_default():
+    messages = FakeMessages(("no", "y", "2"))
+    escalator = Escalator("k", client=types.SimpleNamespace(messages=messages),
+                          decisions={"knowledge": {"below": 1.01, "weight": 0.5}})
+    local, out = _run(escalator)
+    assert not messages.prompts and out == local  # server default 0: nothing escalates
+    body = {**BODY, "moelars": {"calibrators": {"area": "knowledge"}}}
+    local, out = _run(escalator, body)
+    assert len(messages.prompts) == 1 and out.answers["area"].escalated["answer"] == "y"
+    assert out.answers["area"].probabilities["y"] == round(0.5 + 0.5 * local.answers["area"].probabilities["y"], 4)
+    assert out.answers["failed"] == local.answers["failed"]
 
 
 def test_threshold_opt_out_and_failures_keep_local_answers():

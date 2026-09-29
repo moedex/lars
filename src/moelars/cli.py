@@ -140,8 +140,13 @@ def _escalator_from_args(args: argparse.Namespace):
     if not key:
         return None, ("off: --escalate was given but no API key was found (ANTHROPIC_API_KEY, "
                       "MOELARS_ANTHROPIC_KEY_FILE, or ~/.config/moelars/anthropic-key)")
-    escalator = Escalator(key, model=args.escalate_model, below=args.escalate_below, weight=args.escalate_weight)
-    return escalator, f"on: answers below {args.escalate_below} also go to {args.escalate_model}"
+    named = load_named_calibrators(getattr(args, "calibration_dir", None))
+    decisions = {name: c.escalate for name, c in named.items() if c.escalate}
+    escalator = Escalator(key, model=args.escalate_model, below=args.escalate_below, weight=args.escalate_weight,
+                          decisions=decisions)
+    scope = ", ".join(f"{n} below {d['below']}" for n, d in sorted(decisions.items())) or "no decision opts in"
+    default = f"; other answers below {args.escalate_below}" if args.escalate_below else ""
+    return escalator, f"on ({args.escalate_model}): {scope}{default}"
 
 
 def cmd_mcp_bridge(args: argparse.Namespace) -> int:
@@ -171,6 +176,8 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     if args.limit:
         examples = examples[: args.limit]
     calibrator = calibrate(engine, examples, source=args.data)
+    if args.escalate_below:
+        calibrator.escalate = {"below": args.escalate_below, "weight": args.escalate_weight}
     calibrator.save(args.out)
     print(json.dumps({"temperatures": calibrator.temperatures, "saved": args.out}, indent=2))
     return 0
@@ -183,7 +190,9 @@ def add_escalation_args(parser: argparse.ArgumentParser) -> None:
                         help="send answers below --escalate-below to a hosted Claude model (needs an API key at "
                              "startup and moelars[escalate]); the state text leaves the machine for those")
     parser.add_argument("--escalate-model", default=DEFAULT_MODEL)
-    parser.add_argument("--escalate-below", type=float, default=DEFAULT_BELOW)
+    parser.add_argument("--escalate-below", type=float, default=DEFAULT_BELOW,
+                        help="server-wide threshold for questions whose decision sets none; 0 (the default) "
+                             "escalates only decisions whose calibrator opts in")
     parser.add_argument("--escalate-weight", type=float, default=DEFAULT_WEIGHT,
                         help="weight of the hosted pick in the served probabilities")
 
@@ -233,6 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
     cal.add_argument("--data", required=True)
     cal.add_argument("--out", required=True)
     cal.add_argument("--limit", type=int, default=0)
+    cal.add_argument("--escalate-below", type=float, default=0.0,
+                     help="make this decision escalate answers below this to the hosted model "
+                          "(set from evals/escalation_check.py); 0 keeps it local")
+    cal.add_argument("--escalate-weight", type=float, default=0.5)
     cal.set_defaults(func=cmd_calibrate)
     return parser
 

@@ -7,6 +7,15 @@ picks one option through a forced tool call. The served probabilities become
 at the default weight but the local distribution still shapes the rest. The answer carries
 `escalated: {model, answer}` so a caller can tell. Multi questions are not escalated.
 
+Escalation is per decision. A named calibrator (`serve --calibration-dir`) carries
+`"escalate": {"below": p, "weight": w}` only where a measurement showed the hosted model helps
+that decision (`evals/escalation_check.py`); a question answered with that calibrator uses it.
+Everything else uses the server default, `--escalate-below`, which is 0 (never): escalating
+every low-confidence answer lowered jev-bench accuracy at every threshold (0.767 local, 0.750 at
+0.8), because the hosted model was right less often than moe-LARS on the rows moe-LARS was unsure
+of; it helped only knowledge-heavy tasks (evals/RESULTS.md, 2026-09-29). A request can set
+`moelars.escalate_below` itself, or stay local with `moelars.escalate: false`.
+
 The API key is resolved once, at startup (`resolve_api_key`). Without one, no escalator is
 built and nothing is ever routed out; the server says so at startup and in /v1/status.
 Escalation sends the state and question text to the hosted API, so it is opt-in: the
@@ -29,7 +38,7 @@ from typing import Any
 from moelars.schema import ChoiceAnswer, NoulAnswer, ScoreAnswer, SystemOneRequest, SystemOneResponse
 
 DEFAULT_MODEL = "claude-haiku-4-5"
-DEFAULT_BELOW = 0.8
+DEFAULT_BELOW = 0.0
 DEFAULT_WEIGHT = 0.8
 KEY_FILE = Path.home() / ".config" / "moelars" / "anthropic-key"
 SYSTEM = ("You answer one typed question about a piece of content. Read the content and the question, "
@@ -78,7 +87,9 @@ def _prompt(state: Any, question: Any) -> str:
 
 class Escalator:
     def __init__(self, api_key: str, model: str = DEFAULT_MODEL, below: float = DEFAULT_BELOW,
-                 weight: float = DEFAULT_WEIGHT, client: Any | None = None) -> None:
+                 weight: float = DEFAULT_WEIGHT, client: Any | None = None,
+                 decisions: dict[str, dict[str, float]] | None = None) -> None:
+        """`decisions` maps a named calibrator to its escalation spec, {"below": p, "weight": w}."""
         if client is None:
             import anthropic
 
@@ -87,12 +98,21 @@ class Escalator:
         self.model = model
         self.below = below
         self.weight = weight
+        self.decisions = dict(decisions or {})
         self.calls = 0
         self.errors = 0
 
     def status(self) -> dict[str, Any]:
-        return {"model": self.model, "below": self.below, "weight": self.weight, "calls": self.calls,
-                "errors": self.errors}
+        return {"model": self.model, "default_below": self.below, "weight": self.weight,
+                "decisions": self.decisions, "calls": self.calls, "errors": self.errors}
+
+    def policy(self, request: SystemOneRequest, qid: str) -> tuple[float, float]:
+        """(threshold, weight) for one question: the request's override, else its decision's spec,
+        else the server default."""
+        options = request.moelars
+        spec = self.decisions.get(options.calibrators.get(qid, options.calibrator) or "") or {}
+        below = options.escalate_below if options.escalate_below is not None else spec.get("below", self.below)
+        return float(below), float(spec.get("weight", self.weight))
 
     async def pick(self, state: Any, question: Any) -> str:
         options = list(_options(question))
@@ -108,8 +128,7 @@ class Escalator:
             raise ValueError(f"hosted model answered {chosen!r}")
         return chosen
 
-    def _blend(self, answer: Any, chosen: str) -> Any:
-        w = self.weight
+    def _blend(self, answer: Any, chosen: str, w: float) -> Any:
         if isinstance(answer, NoulAnswer):
             target = 1.0 if chosen == "yes" else 0.0
             return answer.model_copy(update={"noul": round(w * target + (1 - w) * answer.noul, 4)})
@@ -125,9 +144,8 @@ class Escalator:
         options = request.moelars
         if options.escalate is False:
             return response
-        below = options.escalate_below if options.escalate_below is not None else self.below
         due = [qid for qid, a in response.answers.items()
-               if (p := top_probability(a)) is not None and p < below]
+               if (p := top_probability(a)) is not None and p < self.policy(request, qid)[0]]
 
         async def one(qid: str) -> None:
             self.calls += 1
@@ -139,7 +157,7 @@ class Escalator:
                 response.answers[qid] = answer.model_copy(
                     update={"escalated": {"model": self.model, "error": type(error).__name__}})
                 return
-            blended = self._blend(answer, chosen)
+            blended = self._blend(answer, chosen, self.policy(request, qid)[1])
             response.answers[qid] = blended.model_copy(
                 update={"escalated": {"model": self.model, "answer": chosen}})
 
