@@ -797,3 +797,7 @@ chosen on the mean of seen and unseen validation macro (step 4000 of 4333).
 - Dilution kept most of the in-distribution gain and removed the transfer loss.
 - Without civil_comments corpus E is 0.757 against Jev's 0.733; it is below Jev on 10 of 22
   configs (corpus C s1 as served: 14).
+
+Corpus E as served (one pooled calibrator over all 22 configs' validation rows,
+`calibration/served/lora-30b-e-s0.json`): **0.767 macro, Brier 0.285, ECE 0.082**, against Jev's
+0.733 / 0.349 / 0.113. The login service now serves this adapter.
