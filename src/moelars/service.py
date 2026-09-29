@@ -133,6 +133,28 @@ def _health(port: int) -> dict[str, Any] | None:
         return None
 
 
+def _bootout() -> None:
+    """Unload the agent and wait until launchd has let go of it; bootstrapping the same label
+    while the old job is still unloading fails with "Bootstrap failed: 5: Input/output error"."""
+    if not loaded():
+        return
+    _launchctl("bootout", f"{_domain()}/{LABEL}")
+    for _ in range(40):
+        if not loaded():
+            return
+        time.sleep(0.25)
+
+
+def _bootstrap() -> subprocess.CompletedProcess:
+    result = _launchctl("bootstrap", _domain(), str(PLIST))
+    for _ in range(3):
+        if result.returncode == 0 or "5:" not in result.stderr:
+            break
+        time.sleep(2)
+        result = _launchctl("bootstrap", _domain(), str(PLIST))
+    return result
+
+
 def _port_from_plist() -> int:
     if not PLIST.exists():
         return 8600
@@ -161,10 +183,9 @@ def cmd_install(args: argparse.Namespace) -> int:
     key_file = ensure_api_key()
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     PLIST.parent.mkdir(parents=True, exist_ok=True)
-    if loaded():
-        _launchctl("bootout", f"{_domain()}/{LABEL}")
+    _bootout()
     PLIST.write_bytes(plistlib.dumps(plist))
-    result = _launchctl("bootstrap", _domain(), str(PLIST))
+    result = _bootstrap()
     if result.returncode != 0:
         raise SystemExit(f"launchctl bootstrap failed: {result.stderr.strip()}")
     url = f"http://127.0.0.1:{args.port}"
@@ -193,7 +214,9 @@ def cmd_start(args: argparse.Namespace) -> int:
     if loaded():
         _launchctl("kickstart", f"{_domain()}/{LABEL}")
     else:
-        _launchctl("bootstrap", _domain(), str(PLIST), check=True)
+        result = _bootstrap()
+        if result.returncode != 0:
+            raise SystemExit(f"launchctl bootstrap failed: {result.stderr.strip()}")
     for _ in range(40):
         if _health(_port_from_plist()):
             print("started")
@@ -205,8 +228,7 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_stop(_: argparse.Namespace) -> int:
     """Unload the agent until `start` or the next login."""
-    if loaded():
-        _launchctl("bootout", f"{_domain()}/{LABEL}")
+    _bootout()
     print("stopped (starts again at next login; `moelars service uninstall` to remove it)")
     return 0
 
@@ -229,8 +251,7 @@ def cmd_logs(args: argparse.Namespace) -> int:
 
 
 def cmd_uninstall(_: argparse.Namespace) -> int:
-    if loaded():
-        _launchctl("bootout", f"{_domain()}/{LABEL}")
+    _bootout()
     if PLIST.exists():
         PLIST.unlink()
     print(f"removed {PLIST}; the API key stays in {API_KEY_FILE} and logs in {LOG_DIR}")
