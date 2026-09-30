@@ -1,0 +1,27 @@
+{
+  "macro": 0.7659090909090908,
+  "per_config": {
+    "banking77": 0.81,
+    "boolq": 0.895,
+    "sst5": 0.515,
+    "clinc150": 0.895,
+    "massive": 0.89,
+    "ledgar": 0.815,
+    "go_emotions": 0.54,
+    "mmlu": 0.785,
+    "arc_challenge": 0.95,
+    "mnli": 0.86,
+    "chaosnli": 0.625,
+    "yelp5": 0.585,
+    "helpsteer2_helpfulness": 0.355,
+    "helpsteer2_verbosity": 0.68,
+    "stsb": 0.435,
+    "measuring_hate_speech": 0.785,
+    "fever_evidence": 0.94,
+    "paws": 0.91,
+    "civil_comments": 0.94,
+    "sms_spam": 0.97,
+    "strategyqa_closed": 0.735,
+    "strategyqa_grounded": 0.935
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.0,
+    "score": 1.136141322210519,
+    "multi": 1.0
+  },
+  "platt": {},
+  "fusion": {},
+  "fitted_on": "jev-bench/measuring_hate_speech/validation[:200]",
+  "escalate": null
+}

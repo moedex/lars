@@ -1,0 +1,12 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.0699082620817328,
+    "score": 1.0,
+    "multi": 1.0
+  },
+  "platt": {},
+  "fusion": {},
+  "fitted_on": "jev-bench/go_emotions/validation[:200]",
+  "escalate": null
+}

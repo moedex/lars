@@ -1,0 +1,12 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.6290981196363148,
+    "score": 1.0,
+    "multi": 1.0
+  },
+  "platt": {},
+  "fusion": {},
+  "fitted_on": "jev-bench/clinc150/validation[:200]",
+  "escalate": null
+}

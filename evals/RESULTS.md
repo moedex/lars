@@ -824,3 +824,19 @@ the serving path, then blended as the server blends (`weight * one_hot(pick) + (
   Choosing a threshold and weight per config on validation gives 0.773 on test (Brier 0.288, 17.5%
   escalated), about +0.6 over local, from mmlu +0.060, sst5 +0.050, stsb +0.035; a few chosen
   policies lose on test (massive -0.025). Escalation is a per-decision tool, not a default.
+
+## 2026-09-30: corpus E seed 1, the seed ensemble, and the 4B tier
+
+| system | macro acc | Brier | vs corpus-E s0 (95% CI) |
+|---|---|---|---|
+| 30B corpus E, seed 0 (served) | 0.765 | 0.282 | baseline |
+| 30B corpus E, seed 1 | 0.757 | 0.289 | -0.8 pts (-1.6 to -0.0) |
+| seeds 0 + 1 averaged (live: 0.7659) | 0.766 | 0.281 | +0.1 pts (-0.4 to +0.7) |
+| 4B corpus E, seed 0 | 0.740 | 0.302 | -2.5 pts (-3.6 to -1.5) |
+
+- A second seed adds nothing worth a second adapter (+0.1); seed 0 stays the default. Two
+  adapters cost 761 ms per three-question request against 362 ms for one.
+- The 4B tier is 0.740, still above Jev's 0.733, at about 3 GB. It is within a point of the 30B
+  on 10 of 22 configs (banking77, boolq, mnli, paws, ledgar, go_emotions, civil_comments, ...) and
+  loses most on knowledge and fine-grained score tasks (stsb -13.5, sst5 -10, helpsteer2 -8.5,
+  mmlu -8, strategyqa_closed -7.5).

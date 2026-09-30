@@ -1,0 +1,12 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.0,
+    "score": 2.6341090958278026,
+    "multi": 1.0
+  },
+  "platt": {},
+  "fusion": {},
+  "fitted_on": "jev-bench/helpsteer2_helpfulness/validation[:200]",
+  "escalate": null
+}

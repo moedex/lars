@@ -1,0 +1,17 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.0,
+    "score": 1.0,
+    "multi": 1.0
+  },
+  "platt": {
+    "noul": [
+      0.446590919333549,
+      -0.9370686941095953
+    ]
+  },
+  "fusion": {},
+  "fitted_on": "jev-bench/civil_comments/validation[:200]",
+  "escalate": null
+}
