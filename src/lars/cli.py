@@ -27,13 +27,14 @@ def _apply_preset(args: argparse.Namespace) -> None:
     args.model = args.model or preset.model
     if not args.adapter:
         args.adapter = list(preset.adapters)
-        args.calibration = args.calibration or preset.calibrations
+        args.calibration = args.calibration or list(preset.calibrations)
 
 
 def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
-    from lars.presets import resolve_adapter, resolve_calibration
+    from lars.presets import resolve_adapter, resolve_calibration, resolve_model
 
     _apply_preset(args)
+    model = resolve_model(args.model)
     adapters = [resolve_adapter(a) for a in args.adapter or []]
     calibrations = [resolve_calibration(c) for c in args.calibration or []]
     calibrators = [Calibrator.load(c) if c else None for c in calibrations]
@@ -41,7 +42,7 @@ def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
     if hasattr(args, "max_rows"):  # serve only; eval and calibrate score one row per question
         budgets = {"max_rows": args.max_rows or None, "max_input_tokens": args.max_input_tokens or None}
     named = load_named_calibrators(getattr(args, "calibration_dir", None))
-    backend = load_backend(args.backend, model=args.model, template=args.template,
+    backend = load_backend(args.backend, model=model, template=args.template,
                            adapter=adapters if len(adapters) > 1 else (adapters[0] if adapters else None))
     if len(adapters) > 1:
         if args.head:
@@ -99,7 +100,7 @@ def _check_local_paths(args: argparse.Namespace) -> None:
         if path and not _is_hub_id(path) and not Path(path).exists():
             raise SystemExit(f"not found: {path}")
     for path in args.calibration or []:
-        if path and not Path(path).exists() and path.count("/") != 2:
+        if path and not _is_hub_id(path) and not Path(path).exists():
             raise SystemExit(f"not found: {path}")
 
 

@@ -95,23 +95,21 @@ def build_plist(program: list[str], process_type: str = "Standard", api_key_file
 
 
 def check_cached(args: argparse.Namespace) -> list[str]:
-    """Hub IDs that are not in the local cache: an offline start would fail on them."""
-    from lars.presets import PRESETS, _is_hub_id
+    """Hub references that are not in the local cache: an offline start would fail on them."""
+    from lars.presets import PRESETS, _is_hub_id, resolve_hub
 
-    ids = [args.model] if args.model else []
-    ids += list(args.adapter or [])
+    refs = [args.model] if args.model else []
+    refs += list(args.adapter or []) + list(getattr(args, "calibration", None) or [])
     if args.preset and args.preset in PRESETS:
         preset = PRESETS[args.preset]
-        ids += [preset.model] if not args.model else []
-        ids += list(preset.adapters) if not args.adapter else []
+        refs += [preset.model] if not args.model else []
+        refs += list(preset.adapters) + list(preset.calibrations) if not args.adapter else []
     missing = []
-    for repo in [i for i in ids if i and _is_hub_id(i)]:
+    for ref in dict.fromkeys(r for r in refs if r and _is_hub_id(r)):
         try:
-            from huggingface_hub import snapshot_download
-
-            snapshot_download(repo_id=repo, local_files_only=True)
+            resolve_hub(ref, cached_only=True)
         except Exception:  # noqa: BLE001 - any failure means an offline start cannot load it
-            missing.append(repo)
+            missing.append(ref)
     return missing
 
 
