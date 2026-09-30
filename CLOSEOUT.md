@@ -204,3 +204,12 @@ Each fix gets a test and a status line in `CODEBASE-REVIEW.md`, same format as M
   GGUF took about 2.5 s per row in Docker, and Laya answers in about 0.17 s at 0.559 macro
   (`evals/RESULTS.md`, 2026-09-25). The 30B-A3B has only 3B active parameters, so a Q4 GGUF
   (about 18 GB of RAM) may be practical; measure it before promising it.
+- LARS on iPhone through Core AI (macOS 27 / iOS 27). The 4B tier with its fused corpus-E
+  LoRA exports with `apple/coreai-models` (iOS preset: palettized, static graphs, Neural
+  Engine) and runs in Apple's Swift runner: about 1,900 tok/s prefill on an M5 Max's Neural
+  Engine. The preset's largest prompt graph is 64 tokens, so add 256 and 512 to
+  `IOS_STATIC_QUERY_LENS` for our long single-pass prompts, check the logits against MLX on
+  captured rows, and measure on a phone. The first Neural Engine compile takes about 13
+  minutes and is cached after that. Spike: `~/Code/personal/coreai-spike`, with results in
+  `evals/RESULTS.md` once written up. On the Mac, Core AI's GPU path is only about 8% faster
+  than fused MLX, so it isn't worth a macOS backend.
