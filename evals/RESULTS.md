@@ -840,3 +840,6 @@ the serving path, then blended as the server blends (`weight * one_hot(pick) + (
   on 10 of 22 configs (banking77, boolq, mnli, paws, ledgar, go_emotions, civil_comments, ...) and
   loses most on knowledge and fine-grained score tasks (stsb -13.5, sst5 -10, helpsteer2 -8.5,
   mmlu -8, strategyqa_closed -7.5).
+
+The 4B tier as served (one pooled calibrator, `calibration/served/lora-4b-e-s0.json`): **0.742
+macro, Brier 0.305, ECE 0.076**, against Jev's 0.733 / 0.349 / 0.113, at about 3 GB.
