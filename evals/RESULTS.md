@@ -843,3 +843,40 @@ the serving path, then blended as the server blends (`weight * one_hot(pick) + (
 
 The 4B tier as served (one pooled calibrator, `calibration/served/lora-4b-e-s0.json`): **0.742
 macro, Brier 0.305, ECE 0.076**, against Jev's 0.733 / 0.349 / 0.113, at about 3 GB.
+
+## 2026-09-30: fusing the corpus-E adapters, and Core AI
+
+**Fusing without losing the adapter.** Re-quantizing a fused adapter at 4 bits loses it
+again (09-22, "Fusing the adapter"): the corpus-E 4B drops from 0.740 to 0.703. The new
+`scripts/fuse_mixed.py` fuses only the layers the adapter trained and stores those at 8 bits,
+leaving every other layer's 4-bit weights unchanged. Paired bootstrap, 22 configs, test rows:
+
+| 4B corpus E | macro acc | Brier | vs unfused (95% CI) | 512-token prefill | peak |
+|---|---|---|---|---|---|
+| unfused adapter | 0.740 | 0.302 | baseline | 148 ms | 3.9 GB |
+| fused, 4-bit (`mlx_lm.fuse`) | 0.703 | 0.355 | -3.7 (-4.9 to -2.5) | 102 ms | 3.3 GB |
+| fused layers at 8 bits (`fuse_mixed.py`) | **0.740** | **0.302** | -0.0 (-0.2 to +0.2) | 108 ms | 5.1 GB |
+
+Suite time per row: 146 ms against 189 ms unfused. A bf16 variant (8.3 GB peak) is no
+more faithful. On 300 captured rows, the 8-bit and bf16 variants give the same top answer
+as the unfused adapter on 99.7% of rows; the 4-bit variant does on 88.0%.
+
+The 30B's adapter touches attention only, and fusing it gains nothing: 160 ms unfused
+against 163 to 166 ms fused, since the experts dominate. The 30B stays unfused.
+
+**Core AI (macOS 27), `apple/coreai-models`, 4B corpus E, M5 Max.** 512-token prefill with
+Apple's Swift `llm-benchmark`:
+
+| runtime | tok/s |
+|---|---|
+| MLX, unfused adapter | 3,747 |
+| MLX, fused 4-bit | 6,098 |
+| Core AI macOS export (GPU, dynamic shapes) | 6,610 |
+| Core AI iOS export (Neural Engine) | 1,890 |
+
+The GPU export is about 8% ahead of fused MLX, but it needs a Swift sidecar, because the
+Python runtime can't set `expectFrequentReshapes`. It also serves one fixed adapter per
+export. The iOS export prefills in 64-token static graphs (`IOS_STATIC_QUERY_LENS`); its
+first Neural Engine compile took 773 s and is cached after that. On an M5 Max, the GPU's
+Neural Accelerators outpace the 16-core Neural Engine. We are not building a macOS backend;
+iPhone is a later item in CLOSEOUT.md. Logit parity for Core AI was not checked.
