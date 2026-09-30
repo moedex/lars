@@ -857,7 +857,9 @@ leaving every other layer's 4-bit weights unchanged. Paired bootstrap, 22 config
 | fused, 4-bit (`mlx_lm.fuse`) | 0.703 | 0.355 | -3.7 (-4.9 to -2.5) | 102 ms | 3.3 GB |
 | fused layers at 8 bits (`fuse_mixed.py`) | **0.740** | **0.302** | -0.0 (-0.2 to +0.2) | 108 ms | 5.1 GB |
 
-Suite time per row: 146 ms against 189 ms unfused. A bf16 variant (8.3 GB peak) is no
+Suite time per row: 146 ms against 189 ms unfused. As served (one pooled calibrator,
+`calibration/served/lora-4b-e-s0-fused-mixed8.json`): **0.741 macro, Brier 0.305, ECE 0.074**,
+against 0.742 / 0.305 / 0.076 unfused. This is the published 4B tier (`moedex/lars/4b`). A bf16 variant (8.3 GB peak) is no
 more faithful. On 300 captured rows, the 8-bit and bf16 variants give the same top answer
 as the unfused adapter on 99.7% of rows; the 4-bit variant does on 88.0%.
 
