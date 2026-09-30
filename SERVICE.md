@@ -116,7 +116,7 @@ session, which is all a coding agent needs, since agents only run once you're lo
 
 - Today: `--adapter checkpoints/lora-30b-c-s1 --calibration calibration/served/lora-30b-c-s1.json`
   (the current single-adapter default).
-- Once the adapter is on the Hub: `--preset 30b`, cached locally for offline boot.
+- `--preset 30b` (or `4b`) serves the published tier from `moedex/lars`, cached locally for offline boot.
 - Changing it is `lars service install` with new options, then `restart`. There's no hot
   swap; a restart costs a few seconds.
 - Whatever wins the current work (corpus D, the two-seed average) gets in the same way.

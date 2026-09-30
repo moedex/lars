@@ -171,10 +171,11 @@ Each fix gets a test and a status line in `CODEBASE-REVIEW.md`, same format as M
   adapter from the Hub (`huggingface_hub.snapshot_download`) and the pooled calibrator.
   `--backend mock` stays the default with no preset. Add a preset smoke test that uses the
   mock backend in CI.
-- [ ] HF Hub: `moedex/lars-qwen3-30b-a3b-lora-attn` (attention seed 1, `checkpoints/lora-30b-c-s1`), with
-  `adapter_config.json`, safetensors, the calibrator, and a model card: base model, recipe and
-  seed, training sources and licenses from §5, the jev-bench table, known limitations, and the
-  data policy (no Jev-labeled data).
+- [x] HF Hub (2026-09-30): [`moedex/lars`](https://huggingface.co/moedex/lars), one repository with a
+  folder per tier: `4b/` (corpus-E LoRA fused at 8 bits, `scripts/fuse_mixed.py`) and `30b-a3b/`
+  (corpus-E attention LoRA, `checkpoints/lora-30b-e-s0`), each with its pooled calibrator as
+  `lars-calibration.json`. The model card covers base models, recipe and seed, sources and
+  licenses from §5, the jev-bench table, limitations, and the data policy.
 - [ ] Docs: README quickstart using the preset, the headline table, the civil_comments caveat,
   and the Docker images (mock, and llama.cpp on CPU: first hardware pass 2026-09-25 found
   and fixed zeroed logits; Qwen3-4B Q4_K_M boolq 0.84, sst5 0.48 on 100 rows). Update `HANDOFF.md` and `evals/RESULTS.md`.
