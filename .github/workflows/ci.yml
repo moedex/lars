@@ -18,17 +18,17 @@ jobs:
       - run: uv sync --extra dev --extra mcp --extra escalate --python ${{ matrix.python }}
       - run: uv run ruff check .
       - run: uv run pytest
-      - run: uv run moelars eval --backend mock --data evals/samples/support_tickets.jsonl
+      - run: uv run lars eval --backend mock --data evals/samples/support_tickets.jsonl
 
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t moelars .
-      - run: docker run -d --name moelars -p 8600:8600 moelars
+      - run: docker build -t lars .
+      - run: docker run -d --name lars -p 8600:8600 lars
       - run: |
           for i in $(seq 30); do curl -sf localhost:8600/healthz && exit 0; sleep 1; done
-          docker logs moelars; exit 1
+          docker logs lars; exit 1
       - run: |
           curl -sf localhost:8600/v1/systemone -H 'content-type: application/json' \
             -d '{"state":"I was charged twice.","questions":{"refund":{"type":"noul","instructions":"Money back?"}}}'

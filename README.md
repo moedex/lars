@@ -1,12 +1,12 @@
-# moe-LARS
+# LARS
 
-**Moe Limited but Accurate Response System.** A local-models-only typed-decision engine.
+**Limited but Accurate Response System.** A local-models-only typed-decision engine.
 
 State plus typed questions go in. Calibrated probability distributions come out, in one
 forward pass per question, with no text generation. The answer space is limited to the
 options you declare, which is what makes calibration and zero structural errors possible.
 
-moe-LARS is wire-compatible with the System One HTTP API. Point any existing System One
+LARS is wire-compatible with the System One HTTP API. Point any existing System One
 client at it by changing the base URL.
 
 ```
@@ -14,7 +14,7 @@ POST /v1/systemone
 GET  /v1/models
 ```
 
-Three primitives from the System One shape, one moe-LARS addition:
+Three primitives from the System One shape, one LARS addition:
 
 | primitive | question | answer |
 |---|---|---|
@@ -23,16 +23,16 @@ Three primitives from the System One shape, one moe-LARS addition:
 | `score` | which ordered level? | `score` (may be fractional), `legend`, `probabilities`, `confidence` |
 | `multi` | which of these apply? | `probabilities` per option, `selected` |
 
-moe-LARS extensions, all opt-in under a `moelars` request key: permutation-averaged choice
+LARS extensions, all opt-in under a `lars` request key: permutation-averaged choice
 answers with an `order_sensitivity` metric, declared constraints between nouls,
 abstention below a probability margin, evidence spans by leave-one-out ablation, and evidence fusion: named numeric features per
-noul (`moelars.features`), combined with the model's logit by a logistic fitted in `calibrate`.
+noul (`lars.features`), combined with the model's logit by a logistic fitted in `calibrate`.
 
 ## Quickstart
 
 ```bash
 uv sync --extra dev
-uv run moelars serve --backend mock            # no model needed, deterministic demo answers
+uv run lars serve --backend mock            # no model needed, deterministic demo answers
 ```
 
 ```bash
@@ -50,30 +50,30 @@ With a real model on Apple Silicon:
 
 ```bash
 uv sync --extra dev --extra mlx
-uv run moelars serve --backend mlx --model mlx-community/Qwen3.5-4B-Instruct-4bit
+uv run lars serve --backend mlx --model mlx-community/Qwen3.5-4B-Instruct-4bit
 ```
 
-The MLX backend caps MLX's buffer cache at 4 GB (`MOELARS_MLX_CACHE_GB` changes it). Uncapped, varied prompt lengths grew it to about 100 GB within a few hundred requests.
+The MLX backend caps MLX's buffer cache at 4 GB (`LARS_MLX_CACHE_GB` changes it). Uncapped, varied prompt lengths grew it to about 100 GB within a few hundred requests.
 
 Or any GGUF model anywhere:
 
 ```bash
 uv sync --extra dev --extra llamacpp
-uv run moelars serve --backend llamacpp --model ./models/qwen3.5-4b-instruct-q4_k_m.gguf --template chatml
+uv run lars serve --backend llamacpp --model ./models/qwen3.5-4b-instruct-q4_k_m.gguf --template chatml
 ```
 
 In Docker (Linux has no Metal, so the container serves the mock backend or GGUF models on
 CPU through llama.cpp; use the MLX backend natively on Apple Silicon):
 
 ```bash
-docker build -t moelars .                                        # mock backend
-docker run --rm -p 8600:8600 moelars
-docker build -t moelars:llamacpp --build-arg EXTRAS=llamacpp .   # compiles llama.cpp for CPU
-docker run --rm -p 8600:8600 -v "$PWD/models:/models:ro" moelars:llamacpp \
+docker build -t lars .                                        # mock backend
+docker run --rm -p 8600:8600 lars
+docker build -t lars:llamacpp --build-arg EXTRAS=llamacpp .   # compiles llama.cpp for CPU
+docker run --rm -p 8600:8600 -v "$PWD/models:/models:ro" lars:llamacpp \
   --backend llamacpp --model /models/Qwen3-4B-Instruct-2507-Q4_K_M.gguf --template chatml
 ```
 
-Arguments after the image name go to `moelars serve`; set `MOELARS_API_KEY` with `-e` to
+Arguments after the image name go to `lars serve`; set `LARS_API_KEY` with `-e` to
 require a bearer token.
 
 Use it from the official System One SDKs by swapping the base URL:
@@ -92,41 +92,41 @@ print(r.nouls["refund"].noul, r.choices["team"].choice)
 
 ## Run it at login, for coding agents (MCP)
 
-On macOS, `moelars service` runs the server as a launchd agent that starts at login. Coding
+On macOS, `lars service` runs the server as a launchd agent that starts at login. Coding
 agents reach it over MCP at `/mcp`. The model loads on the first request and unloads after
 15 minutes without one. Details are in `SERVICE.md`.
 
 ```bash
 uv tool install '.[mlx,mcp]'                     # a fixed install for the service to run from
-moelars service install --backend mlx --model mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit \
+lars service install --backend mlx --model mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit \
   --adapter checkpoints/lora-30b-c-s1 --calibration calibration/served/lora-30b-c-s1.json
-moelars service status                           # also: start, stop, restart, logs, uninstall
-claude mcp add --transport http --scope user moelars http://127.0.0.1:8600/mcp \
-  --header "Authorization: Bearer $(cat ~/.config/moelars/api-key)"
+lars service status                           # also: start, stop, restart, logs, uninstall
+claude mcp add --transport http --scope user lars http://127.0.0.1:8600/mcp \
+  --header "Authorization: Bearer $(cat ~/.config/lars/api-key)"
 ```
 
-The tools are `moelars_check` (the probability that a claim holds for a text),
-`moelars_classify` (one option out of several), `moelars_decide` (a full System One request)
-and `moelars_status`. Clients that only speak stdio run `moelars mcp-bridge`, which holds
+The tools are `lars_check` (the probability that a claim holds for a text),
+`lars_classify` (one option out of several), `lars_decide` (a full System One request)
+and `lars_status`. Clients that only speak stdio run `lars mcp-bridge`, which holds
 no model and forwards to the service. The service binds localhost, refuses non-local
-`Origin` headers, and requires the key that `install` writes to `~/.config/moelars/api-key`.
-For your own server, `moelars serve --mcp --idle-unload 15m` does the same without launchd.
+`Origin` headers, and requires the key that `install` writes to `~/.config/lars/api-key`.
+For your own server, `lars serve --mcp --idle-unload 15m` does the same without launchd.
 
 ## Calibrate on your own data
 
 Raw model logits are not calibrated. Fit temperatures on a labeled set, then serve with them:
 
 ```bash
-uv run moelars calibrate --backend mlx --model <model> --data my_labels.jsonl --out calibration/mine.json
-uv run moelars serve     --backend mlx --model <model> --calibration calibration/mine.json
-uv run moelars eval      --backend mlx --model <model> --calibration calibration/mine.json --data my_test.jsonl
+uv run lars calibrate --backend mlx --model <model> --data my_labels.jsonl --out calibration/mine.json
+uv run lars serve     --backend mlx --model <model> --calibration calibration/mine.json
+uv run lars eval      --backend mlx --model <model> --calibration calibration/mine.json --data my_test.jsonl
 ```
 
 `eval` reports accuracy, expected calibration error, Brier score, and the coverage you
 can automate at a 5% error budget. The JSONL format is in `evals/README.md`. Nouls get
 a Platt fit on the raw yes-minus-no logit, which can move a biased model's decision
 boundary; choice and score get a temperature. Rows may carry `"features": {"name": value}` for nouls; `calibrate` then also fits an evidence fusion, used
-whenever a request supplies the same features in `moelars.features`. `examples/molar_triage/` walks through
+whenever a request supplies the same features in `lars.features`. `examples/molar_triage/` walks through
 this end to end on a small hand-labeled dental inbox.
 
 ## Train a decision head (Tier B)
@@ -136,19 +136,19 @@ the model's own label logits from cached features, in seconds, and serves throug
 same engine:
 
 ```bash
-uv run python -m moelars.train.build   --out data/train
-uv run python -m moelars.train.extract --model <model> --records data/train/*.train.jsonl --out data/features
-uv run python -m moelars.train.residual --train data/features/train.npz --heldout data/features/heldout.npz
-uv run moelars serve --backend mlx --model <model> --head checkpoints/pointer_head.npz --projection data/features/projection.npy
+uv run python -m lars.train.build   --out data/train
+uv run python -m lars.train.extract --model <model> --records data/train/*.train.jsonl --out data/features
+uv run python -m lars.train.residual --train data/features/train.npz --heldout data/features/heldout.npz
+uv run lars serve --backend mlx --model <model> --head checkpoints/pointer_head.npz --projection data/features/projection.npy
 ```
 
-Details and the data policy are in `src/moelars/train/README.md`.
+Details and the data policy are in `src/lars/train/README.md`.
 
 ## Layout
 
 ```
-src/moelars/
-  schema.py        wire models, request validation, moe-LARS extensions
+src/lars/
+  schema.py        wire models, request validation, LARS extensions
   render.py        prompt rows: fenced state prefix + per-question suffix
   labels.py        single-token option labels verified per tokenizer
   primitives.py    softmax, confidence formulas, expected score, order sensitivity
@@ -157,7 +157,7 @@ src/moelars/
   backends/        mock, mlx, llamacpp
   server.py        FastAPI app, System One error and header conventions
   evalset.py       labeled JSONL loading, eval and calibrate
-  cli.py           moelars serve | eval | calibrate
+  cli.py           lars serve | eval | calibrate
 tests/             unit tests plus a conformance test that runs the official SDK in-process
 evals/             benchmark data conventions and a jev-bench fetcher
 ```

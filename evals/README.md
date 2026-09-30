@@ -28,9 +28,9 @@ One object per line:
 
 ```bash
 uv run python evals/fetch_jevbench.py --config banking77 --split test --out evals/data/banking77.test.jsonl
-uv run moelars eval --backend mock --data evals/data/banking77.test.jsonl
-uv run moelars calibrate --backend mlx --model <path> --data evals/data/banking77.validation.jsonl --out calibration/banking77.json
-uv run moelars eval --backend mlx --model <path> --calibration calibration/banking77.json --data evals/data/banking77.test.jsonl
+uv run lars eval --backend mock --data evals/data/banking77.test.jsonl
+uv run lars calibrate --backend mlx --model <path> --data evals/data/banking77.validation.jsonl --out calibration/banking77.json
+uv run lars eval --backend mlx --model <path> --calibration calibration/banking77.json --data evals/data/banking77.test.jsonl
 ```
 
 Reported: accuracy, ECE, Brier, and coverage at a 5% error budget with the threshold that achieves it.

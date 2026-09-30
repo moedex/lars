@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from moelars.backends.mock import MockBackend
-from moelars.calibration import Calibrator
-from moelars.engine import Engine, EnsembleEngine, _AdapterView
-from moelars.schema import SystemOneRequest
+from lars.backends.mock import MockBackend
+from lars.calibration import Calibrator
+from lars.engine import Engine, EnsembleEngine, _AdapterView
+from lars.schema import SystemOneRequest
 
 STATE = "Help! My payouts have been failing for 3 days. This is the second time I have written in."
 QUESTIONS = {
@@ -62,7 +62,7 @@ def test_ensemble_is_the_mean_of_its_members():
 
 
 def test_identical_members_reproduce_a_single_engine():
-    request = SystemOneRequest(state=STATE, questions=QUESTIONS, moelars={"explain": True, "abstain_margin": 0.2})
+    request = SystemOneRequest(state=STATE, questions=QUESTIONS, lars={"explain": True, "abstain_margin": 0.2})
     single = Engine(MockBackend()).evaluate(request).answers
     backend = TwoAdapterMock()
     backend.use_adapter = lambda index: None  # both members see adapter 0, which is the plain mock
@@ -80,5 +80,5 @@ def test_ensemble_checks_the_model_name_and_applies_constraints_once():
         ensemble.evaluate(SystemOneRequest(state=STATE, questions=QUESTIONS, model="other"))
     nouls = {f"q{i}": {"type": "noul", "instructions": f"Statement {i} holds"} for i in range(3)}
     request = SystemOneRequest(state=STATE, questions=nouls,
-                               moelars={"constraints": [{"kind": "exclusive", "questions": list(nouls)}]})
+                               lars={"constraints": [{"kind": "exclusive", "questions": list(nouls)}]})
     assert sum(a.noul for a in ensemble.evaluate(request).answers.values()) <= 1.0

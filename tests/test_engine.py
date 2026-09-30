@@ -1,8 +1,8 @@
 import pytest
 
-from moelars.backends.mock import MockBackend
-from moelars.engine import Engine
-from moelars.schema import ChoiceAnswer, Constraint, MultiAnswer, NoulAnswer, ScoreAnswer, SystemOneRequest
+from lars.backends.mock import MockBackend
+from lars.engine import Engine
+from lars.schema import ChoiceAnswer, Constraint, MultiAnswer, NoulAnswer, ScoreAnswer, SystemOneRequest
 
 STATE = "Help! My payouts have been failing for 3 days. This is the second time I have written in."
 QUESTIONS = {
@@ -51,7 +51,7 @@ def test_basic_shapes(engine):
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens == 5  # 1 choice + 1 score + 1 noul + 2 multi rows
-    assert response.model.startswith("moelars-")
+    assert response.model.startswith("lars-")
 
 
 def test_determinism(engine):
@@ -62,7 +62,7 @@ def test_determinism(engine):
 
 
 def test_permutations_report_order_sensitivity(engine):
-    request = SystemOneRequest(state=STATE, questions=QUESTIONS, moelars={"permutations": 4})
+    request = SystemOneRequest(state=STATE, questions=QUESTIONS, lars={"permutations": 4})
     dept = engine.evaluate(request).answers["department"]
     assert isinstance(dept, ChoiceAnswer)
     assert dept.order_sensitivity is not None
@@ -71,10 +71,10 @@ def test_permutations_report_order_sensitivity(engine):
 
 
 def test_abstain_margin(engine):
-    request = SystemOneRequest(state=STATE, questions=QUESTIONS, moelars={"abstain_margin": 1.0})
+    request = SystemOneRequest(state=STATE, questions=QUESTIONS, lars={"abstain_margin": 1.0})
     answers = engine.evaluate(request).answers
     assert answers["department"].abstain is True
-    request = SystemOneRequest(state=STATE, questions=QUESTIONS, moelars={"abstain_margin": 0.0})
+    request = SystemOneRequest(state=STATE, questions=QUESTIONS, lars={"abstain_margin": 0.0})
     answers = engine.evaluate(request).answers
     assert answers["department"].abstain is False
 
@@ -87,7 +87,7 @@ def test_complement_constraint(engine):
     request = SystemOneRequest(
         state=STATE,
         questions=questions,
-        moelars={"constraints": [{"kind": "complement", "questions": ["needs_human", "bot_can_resolve"]}]},
+        lars={"constraints": [{"kind": "complement", "questions": ["needs_human", "bot_can_resolve"]}]},
     )
     answers = engine.evaluate(request).answers
     assert abs(answers["needs_human"].noul + answers["bot_can_resolve"].noul - 1.0) < 1e-3
@@ -98,7 +98,7 @@ def test_exclusive_constraint_rescales(engine):
     request = SystemOneRequest(
         state=STATE,
         questions=questions,
-        moelars={"constraints": [{"kind": "exclusive", "questions": list(questions)}]},
+        lars={"constraints": [{"kind": "exclusive", "questions": list(questions)}]},
     )
     answers = engine.evaluate(request).answers
     assert sum(a.noul for a in answers.values()) <= 1.0 + 1e-6
@@ -128,7 +128,7 @@ def test_exclusive_rounding_cannot_push_the_sum_over_one():
 
 
 def test_explain_returns_evidence(engine):
-    request = SystemOneRequest(state=STATE, questions=QUESTIONS, moelars={"explain": True})
+    request = SystemOneRequest(state=STATE, questions=QUESTIONS, lars={"explain": True})
     answers = engine.evaluate(request).answers
     dept = answers["department"]
     assert isinstance(dept, ChoiceAnswer)
@@ -152,7 +152,7 @@ def test_validation_rejects_bad_questions():
         SystemOneRequest(
             state=STATE,
             questions={"a": {"type": "noul"}},
-            moelars={"constraints": [{"kind": "complement", "questions": ["a", "missing"]}]},
+            lars={"constraints": [{"kind": "complement", "questions": ["a", "missing"]}]},
         )
 
 
@@ -172,7 +172,7 @@ def test_structured_state_and_criteria(engine):
 
 
 def test_named_calibrators_apply_per_question_and_unknown_names_are_refused():
-    from moelars.calibration import Calibrator
+    from lars.calibration import Calibrator
 
     sharp = Calibrator(platt={"noul": (4.0, 0.0)}, temperatures={"noul": 1.0, "choice": 0.25})
     engine = Engine(MockBackend(), named_calibrators={"ci_failure": sharp})
@@ -182,11 +182,11 @@ def test_named_calibrators_apply_per_question_and_unknown_names_are_refused():
         "c": {"type": "choice", "instructions": "Area?", "criteria": {"x": "X", "y": "Y"}}}}
     plain = engine.evaluate(SystemOneRequest.model_validate(body)).answers
     named = engine.evaluate(SystemOneRequest.model_validate(
-        {**body, "moelars": {"calibrators": {"a": "ci_failure"}}})).answers
+        {**body, "lars": {"calibrators": {"a": "ci_failure"}}})).answers
     assert named["b"].noul == plain["b"].noul  # untouched question keeps the default
     assert plain["a"].noul < named["a"].noul  # Platt slope 4 sharpens a 0.93 towards 1
-    every = engine.evaluate(SystemOneRequest.model_validate({**body, "moelars": {"calibrator": "ci_failure"}})).answers
+    every = engine.evaluate(SystemOneRequest.model_validate({**body, "lars": {"calibrator": "ci_failure"}})).answers
     assert max(every["c"].probabilities.values()) > max(plain["c"].probabilities.values())  # temperature 0.25
     for bad in ({"calibrator": "nope"}, {"calibrators": {"zz": "ci_failure"}}):
         with pytest.raises(ValueError):
-            engine.evaluate(SystemOneRequest.model_validate({**body, "moelars": bad}))
+            engine.evaluate(SystemOneRequest.model_validate({**body, "lars": bad}))

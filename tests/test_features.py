@@ -5,11 +5,11 @@ import json
 import numpy as np
 import pytest
 
-from moelars.backends.mock import MockBackend
-from moelars.calibration import Calibrator, fit_fusion, fit_logistic, fused_probability
-from moelars.engine import Engine
-from moelars.evalset import calibrate, evaluate, read_examples
-from moelars.schema import SystemOneRequest
+from lars.backends.mock import MockBackend
+from lars.calibration import Calibrator, fit_fusion, fit_logistic, fused_probability
+from lars.engine import Engine
+from lars.evalset import calibrate, evaluate, read_examples
+from lars.schema import SystemOneRequest
 
 QUESTION = {"type": "noul", "instructions": "The session shows something new"}
 
@@ -42,10 +42,10 @@ def test_engine_applies_fusion_only_when_its_features_are_present():
     engine = Engine(MockBackend(), calibrator=calibrator)
     plain = engine.evaluate(SystemOneRequest(state="s", questions={"q": QUESTION}))
     fused = engine.evaluate(SystemOneRequest(
-        state="s", questions={"q": QUESTION}, moelars={"features": {"q": {"novel_share": 0.0}}}
+        state="s", questions={"q": QUESTION}, lars={"features": {"q": {"novel_share": 0.0}}}
     ))
     other = engine.evaluate(SystemOneRequest(
-        state="s", questions={"q": QUESTION}, moelars={"features": {"q": {"unrelated": 1.0}}}
+        state="s", questions={"q": QUESTION}, lars={"features": {"q": {"unrelated": 1.0}}}
     ))
     assert fused.answers["q"].noul == pytest.approx(1 / (1 + np.exp(5.0)), abs=1e-4)
     assert other.answers["q"].noul == plain.answers["q"].noul, "missing fitted features fall back to the model"
@@ -53,12 +53,12 @@ def test_engine_applies_fusion_only_when_its_features_are_present():
 
 def test_plain_requests_are_unchanged_and_features_must_target_nouls():
     request = SystemOneRequest(state="s", questions={"q": QUESTION})
-    assert request.moelars.features == {}
+    assert request.lars.features == {}
     with pytest.raises(ValueError, match="unknown question"):
-        SystemOneRequest(state="s", questions={"q": QUESTION}, moelars={"features": {"x": {"f": 1.0}}})
+        SystemOneRequest(state="s", questions={"q": QUESTION}, lars={"features": {"x": {"f": 1.0}}})
     choice = {"type": "choice", "instructions": "Which?", "criteria": {"a": None, "b": None}}
     with pytest.raises(ValueError, match="must be a noul"):
-        SystemOneRequest(state="s", questions={"c": choice}, moelars={"features": {"c": {"f": 1.0}}})
+        SystemOneRequest(state="s", questions={"c": choice}, lars={"features": {"c": {"f": 1.0}}})
 
 
 def test_calibrate_fits_fusion_from_eval_rows_with_features(tmp_path):

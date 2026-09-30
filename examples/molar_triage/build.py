@@ -125,7 +125,7 @@ def main() -> int:
     (HERE / "request.json").write_text(json.dumps({
         "state": MESSAGES[2][0],
         "questions": QUESTIONS,
-        "moelars": {"explain": True, "abstain_margin": 0.15},
+        "lars": {"explain": True, "abstain_margin": 0.15},
     }, indent=2) + "\n")
     return 0
 

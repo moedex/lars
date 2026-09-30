@@ -8,7 +8,7 @@ No Critical or High findings were verified. Findings below describe current beha
 
 ### M1. A request can expand into thousands of model passes
 
-**Status (2026-09-24): fixed.** `Engine` refuses a request over `max_rows` (512) planned rows or `max_input_tokens` (32,768) before any model pass (422 `invalid_request`); the server refuses bodies over 1 MB by `Content-Length` (413). `moelars serve --max-rows/--max-input-tokens/--max-body-bytes`. A chunked body without `Content-Length` is still only bounded by the token budget.
+**Status (2026-09-24): fixed.** `Engine` refuses a request over `max_rows` (512) planned rows or `max_input_tokens` (32,768) before any model pass (422 `invalid_request`); the server refuses bodies over 1 MB by `Content-Length` (413). `lars serve --max-rows/--max-input-tokens/--max-body-bytes`. A chunked body without `Content-Length` is still only bounded by the token budget.
 
 **Evidence:** `src/moelar/schema.py:127-130` has no upper bound on state length, question count, or aggregate option text. `src/moelar/render.py:171-210` multiplies base rows by options and evidence ablations. A schema-valid request with one 255-option `multi` question, 24 state units, and `moelar.explain=true` plans 6,375 rows.
 
@@ -24,7 +24,7 @@ No Critical or High findings were verified. Findings below describe current beha
 
 ### M3. The requested model is silently ignored
 
-**Status (2026-09-25): fixed.** `Engine.evaluate` serves `moelars-latest`, `jev-latest` (the official SDKs' default, so a base-URL swap still works) and the loaded model's exact ID, and refuses any other name with 422 `invalid_request` before any model pass (tested over HTTP).
+**Status (2026-09-25): fixed.** `Engine.evaluate` serves `lars-latest`, `jev-latest` (the official SDKs' default, so a base-URL swap still works) and the loaded model's exact ID, and refuses any other name with 422 `invalid_request` before any model pass (tested over HTTP).
 
 **Evidence:** `src/moelar/schema.py:128` accepts any model string. `src/moelar/engine.py:93-99` does not read it and always returns the loaded engine's model ID. A POST specifying `model: "totally-unknown"` returned 200 with the mock model ID.
 

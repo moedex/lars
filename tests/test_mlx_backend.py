@@ -7,7 +7,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from moelars.backends.mlx import MLXBackend  # noqa: E402
+from lars.backends.mlx import MLXBackend  # noqa: E402
 
 
 class _Tokenizer:
@@ -97,8 +97,8 @@ def test_backend_caps_the_mlx_buffer_cache(monkeypatch):
     # Regression: an uncapped buffer cache grew to about 100 GB over a run of varied prompts.
     limits = []
     monkeypatch.setattr(mx, "set_cache_limit", lambda value: limits.append(value) or 0)
-    monkeypatch.setenv("MOELARS_MLX_CACHE_GB", "2")
-    import moelars.backends.mlx as backend_module
+    monkeypatch.setenv("LARS_MLX_CACHE_GB", "2")
+    import lars.backends.mlx as backend_module
 
     monkeypatch.setattr("mlx_lm.load", lambda *args, **kwargs: (object(), type("T", (), {"chat_template": None})()))
     backend_module.MLXBackend("unused")

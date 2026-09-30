@@ -24,7 +24,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from moelars.train.data import from_tasksource_jev, read_records, write_records
+from lars.train.data import from_tasksource_jev, read_records, write_records
 
 STREAMS = ("open-jev", "jev-bench", "tasksource-jev")
 DROP_EXACT = {"jev-bench/yelp5", "jev-bench/sst5", "jev-bench/stsb"}

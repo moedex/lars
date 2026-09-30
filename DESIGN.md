@@ -1,6 +1,6 @@
-# moe-LARS design
+# LARS design
 
-*Moe Limited but Accurate Response System.* Written 2026-09-22.
+*Limited but Accurate Response System.* Written 2026-09-22.
 
 ## 1. What this is
 
@@ -10,7 +10,7 @@ the System One API popularized by TypeSafe AI's Jev. No text is generated. The a
 space is limited by construction to what the caller declared, so structural errors are
 impossible and probabilities can be calibrated against outcomes.
 
-moe-LARS reproduces the interface and the mechanism from public documentation and public
+LARS reproduces the interface and the mechanism from public documentation and public
 reimplementations. It does not use, and must never use, Jev outputs or any data derived
 from them. Section 8 explains why that is a hard rule.
 
@@ -25,7 +25,7 @@ Goals, in order:
    vLLM or SGLang later.
 
 Non-goals: text generation, arithmetic, date math, multi-hop reasoning, images. Those
-belong in code or in a language model that sits next to moe-LARS.
+belong in code or in a language model that sits next to LARS.
 
 ## 2. What the public evidence says about Jev
 
@@ -50,7 +50,7 @@ launch. None of it comes from calling the API.
 - **The founder says the moat is training data, not architecture.** A LoRA on a 9B open
   model trained on 10k examples lands within 3.5 accuracy points on new sources.
 
-Measured weaknesses that moe-LARS targets directly:
+Measured weaknesses that LARS targets directly:
 
 | weakness | evidence |
 |---|---|
@@ -81,9 +81,9 @@ the end of the suffix, restricted to the label tokens.
 Row variants:
 
 - `base`: one per noul, choice, and score question; one per option for multi.
-- `perm:k`: extra choice rows with shuffled option order, when `moelars.permutations > 0`.
+- `perm:k`: extra choice rows with shuffled option order, when `lars.permutations > 0`.
 - `ablate:i`: all base rows re-rendered with the i-th sentence of the state removed, when
-  `moelars.explain` is on and the state is a string.
+  `lars.explain` is on and the state is a string.
 
 Rows that share a prefix are sent to the backend together so the prefix is prefilled once.
 
@@ -109,16 +109,16 @@ not a guarantee; section 6 lists the red-team work.
   mean.
 - **score**: `score = sum(i * p_i)`. `confidence = 1 - 2 * E|i - score| / (K - 1)`, one
   minus the normalized spread around the expected level, so adjacent-level uncertainty
-  costs less than distant-level uncertainty. This is moe-LARS's definition.
+  costs less than distant-level uncertainty. This is LARS's definition.
 - **multi**: one yes/no row per option, independent probabilities, `selected` at 0.5.
-- **abstain**: when `moelars.abstain_margin` is set, an answer is marked abstained if
+- **abstain**: when `lars.abstain_margin` is set, an answer is marked abstained if
   top1 minus top2 is below the margin (for noul, distance from 0.5 scaled to [0, 1]).
 - **evidence**: each ablation row's distribution is compared with the base distribution;
   the top three spans by movement are returned.
 
 ### 3.5 Constraints
 
-Declared under `moelars.constraints`, over noul questions only:
+Declared under `lars.constraints`, over noul questions only:
 
 - `complement`: two nouls where one negates the other. `p = (p1 + (1 - p2)) / 2`, then
   `p1 = p`, `p2 = 1 - p`.
@@ -134,8 +134,8 @@ move a decision across 0.5, which matters: on an independent phishing benchmark 
 temperature alone could not rescue a model that was at chance, and a fitted bias term
 took it to usable accuracy.
 
-`moelars calibrate` fits temperatures by cross-entropy against hard or soft labels on a
-held-out split. `moelars eval` reports accuracy, ECE, Brier, and coverage at a 5% error
+`lars calibrate` fits temperatures by cross-entropy against hard or soft labels on a
+held-out split. `lars eval` reports accuracy, ECE, Brier, and coverage at a 5% error
 budget with the threshold that achieves it. The last number is the one operators
 actually need: how much can I automate at my error tolerance.
 
@@ -160,19 +160,19 @@ the prefix ids match, since BPE can merge across the boundary.
 
 FastAPI. `POST /v1/systemone`, `GET /v1/models`, `GET /healthz`. Errors are
 `{message, error_type}` with 401, 422, 429, and 5xx semantics matching the System One
-docs. Optional bearer auth via `MOELARS_API_KEY`. Responses carry
-`x-moelars-request-id` and, for SDK compatibility, `x-typesafe-request-id`. Extension
+docs. Optional bearer auth via `LARS_API_KEY`. Responses carry
+`x-lars-request-id` and, for SDK compatibility, `x-typesafe-request-id`. Extension
 fields are omitted when unset so a plain request yields a byte-compatible response.
 
 ## 4. Extensions over the hosted API
 
 | extension | request | response | why |
 |---|---|---|---|
-| permutation averaging | `moelars.permutations` | `order_sensitivity` | order sensitivity is the most reported failure |
-| constraints | `moelars.constraints` | adjusted nouls | invariants callers currently enforce by hand |
-| abstention | `moelars.abstain_margin` | `abstain` | forced choices hide uncertainty from routing code |
-| evidence | `moelars.explain` | `evidence[]` | auditability for consequential decisions |
-| evidence fusion | `moelars.features` per noul | fused `noul` | models are weak at numbers and comparisons that callers can compute exactly; a fitted logistic weighs both |
+| permutation averaging | `lars.permutations` | `order_sensitivity` | order sensitivity is the most reported failure |
+| constraints | `lars.constraints` | adjusted nouls | invariants callers currently enforce by hand |
+| abstention | `lars.abstain_margin` | `abstain` | forced choices hide uncertainty from routing code |
+| evidence | `lars.explain` | `evidence[]` | auditability for consequential decisions |
+| evidence fusion | `lars.features` per noul | fused `noul` | models are weak at numbers and comparisons that callers can compute exactly; a fitted logistic weighs both |
 | multi-select | `type: "multi"` | `probabilities`, `selected` | frameworks fake this with per-option nouls |
 | local calibration | CLI | fitted temperatures and Platt | the hosted model cannot learn from customer data by policy |
 | deterministic replay | always | same input, same output | greedy logits are deterministic; a content-hash cache is free |
@@ -245,7 +245,7 @@ opt-in for fixed schemas with a calibration set.
 
 TypeSafe's Master Customer Agreement forbids using the service or its outputs to
 "perform model distillation, train a model to imitate the output of the Services, or
-develop (or to facilitate the development of) a similar or competing product." moe-LARS is
+develop (or to facilitate the development of) a similar or competing product." LARS is
 built from public documentation and public reimplementations and stays that way:
 
 - No calls to the hosted API from this codebase, its tests, or its evals.
@@ -294,12 +294,12 @@ project: prompt plus logit readout (Tier 0), decision heads trained with proper 
 rules (Tier 1), and LoRA on the backbone (Tier 2), all evaluated with sources held out.
 Their finding that a zero-initialized residual head on the model's own scorer keeps the
 trained gain without regressing on unseen sources is the single most useful published
-result for moe-LARS's Tier B and should be adopted rather than rediscovered.
+result for LARS's Tier B and should be adopted rather than rediscovered.
 
-moe-LARS differs in scope: it is a serving product, not an evaluation engine. Wire
+LARS differs in scope: it is a serving product, not an evaluation engine. Wire
 compatibility with existing clients, local backends including Apple Silicon, and the
 request-level extensions in section 4 are the reasons for it to exist. Where Jevify
-publishes a better recipe, moe-LARS should use it and say so.
+publishes a better recipe, LARS should use it and say so.
 
 Other reference points: **Kev** for the attention-isolated multi-question packing,
 **openJev-verdict-2.0** for permutation-KL training, **jevmlx** for nonce-fenced state

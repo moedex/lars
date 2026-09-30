@@ -23,15 +23,15 @@ for spec in "qwen3-4b|$M4|checkpoints/pointer_head_v2.npz|data/features-full/pro
             "qwen3.5-9b|$M9||" \
             "qwen3-30b-a3b|$M30||"; do
   IFS='|' read -r slug model head proj <<< "$spec"
-  $UV run moelars eval --backend mlx --model $model --data $EX/molar_triage.test.jsonl > logs/molar-$slug-raw.json
-  $UV run moelars calibrate --backend mlx --model $model --data $EX/molar_triage.calibration.jsonl \
+  $UV run lars eval --backend mlx --model $model --data $EX/molar_triage.test.jsonl > logs/molar-$slug-raw.json
+  $UV run lars calibrate --backend mlx --model $model --data $EX/molar_triage.calibration.jsonl \
     --out calibration/molar_triage.$slug.json > logs/molar-$slug-cal.log 2>&1
-  $UV run moelars eval --backend mlx --model $model --calibration calibration/molar_triage.$slug.json \
+  $UV run lars eval --backend mlx --model $model --calibration calibration/molar_triage.$slug.json \
     --data $EX/molar_triage.test.jsonl > logs/molar-$slug-calibrated.json
   [[ -z $head ]] && continue
-  $UV run moelars calibrate --backend mlx --model $model --head $head --projection $proj \
+  $UV run lars calibrate --backend mlx --model $model --head $head --projection $proj \
     --data $EX/molar_triage.calibration.jsonl --out calibration/molar_triage.$slug-head.json > logs/molar-$slug-head-cal.log 2>&1
-  $UV run moelars eval --backend mlx --model $model --head $head --projection $proj \
+  $UV run lars eval --backend mlx --model $model --head $head --projection $proj \
     --calibration calibration/molar_triage.$slug-head.json --data $EX/molar_triage.test.jsonl > logs/molar-$slug-head.json
 done
 

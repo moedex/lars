@@ -29,7 +29,7 @@
       ]
     }
   },
-  "moelars": {
+  "lars": {
     "explain": true,
     "abstain_margin": 0.15
   }

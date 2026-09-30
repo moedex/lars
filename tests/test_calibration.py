@@ -1,6 +1,6 @@
 import numpy as np
 
-from moelars.calibration import (
+from lars.calibration import (
     Calibrator,
     _platt_targets,
     brier,

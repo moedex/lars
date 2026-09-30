@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from moelars.heads import PointerHeadScorer
-from moelars.spans import char_offsets_to_token_indexes, option_end_char_offsets
+from lars.heads import PointerHeadScorer
+from lars.spans import char_offsets_to_token_indexes, option_end_char_offsets
 
 
 def test_option_end_offsets_and_token_mapping():
@@ -31,7 +31,7 @@ def test_zero_head_is_identity_and_bias_moves_yes():
 
 def test_scorer_matches_mlx_head(tmp_path):
     mx = pytest.importorskip("mlx.core")
-    from moelars.train.residual import build_head, save_head
+    from lars.train.residual import build_head, save_head
 
     head = build_head(proj_dim=8, rank=4)
     head.q.weight = mx.random.normal((4, 8))

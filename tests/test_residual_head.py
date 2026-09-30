@@ -5,7 +5,7 @@ import pytest
 
 mx = pytest.importorskip("mlx.core")
 
-from moelars.train.residual import Shard, baseline, build_head, evaluate, train  # noqa: E402
+from lars.train.residual import Shard, baseline, build_head, evaluate, train  # noqa: E402
 
 
 def _synthetic_shard(tmp_path, n=240, k=4, p=16, seed=0):
@@ -42,7 +42,7 @@ def test_zero_init_head_reproduces_backbone(tmp_path):
 
 def test_permutation_loss_ignores_padding():
     """A shuffled twin of a padded row must give zero KL at the identity head."""
-    from moelars.train.residual import perm_loss_fn
+    from lars.train.residual import perm_loss_fn
 
     p, k_max = 8, 5
     head = build_head(p, rank=4)

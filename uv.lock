@@ -1027,6 +1027,61 @@ wheels = [
 ]
 
 [[package]]
+name = "lars-engine"
+version = "0.0.1"
+source = { editable = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "pydantic" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "ruff" },
+    { name = "typesafe-sdk" },
+]
+escalate = [
+    { name = "anthropic" },
+]
+evals = [
+    { name = "datasets" },
+]
+llamacpp = [
+    { name = "llama-cpp-python" },
+]
+mcp = [
+    { name = "httpx" },
+    { name = "mcp" },
+]
+mlx = [
+    { name = "mlx-lm" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", marker = "extra == 'escalate'", specifier = ">=1.0" },
+    { name = "datasets", marker = "extra == 'evals'", specifier = ">=3.0" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "httpx", marker = "extra == 'mcp'", specifier = ">=0.27" },
+    { name = "llama-cpp-python", marker = "extra == 'llamacpp'", specifier = ">=0.3" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.2,<3" },
+    { name = "mlx-lm", marker = "extra == 'mlx'", specifier = ">=0.20" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "typesafe-sdk", marker = "extra == 'dev'", specifier = ">=0.7" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+provides-extras = ["mlx", "llamacpp", "evals", "dev", "mcp", "escalate"]
+
+[[package]]
 name = "llama-cpp-python"
 version = "0.3.35"
 source = { registry = "https://pypi.org/simple" }
@@ -1228,61 +1283,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/79/ec/34f37376e26d537fadffb99af3a760d6545e37f5e1a30a552baadf237fc5/mlx_metal-0.32.2-py3-none-macosx_15_0_arm64.whl", hash = "sha256:55a369250d220b2cf10213a87a2ac1b1a420608c5b35b1df4e7147ac8e32f121", size = 42512323, upload-time = "2026-08-25T10:31:22.673Z" },
     { url = "https://files.pythonhosted.org/packages/dd/cd/4e50bf325100e7165e13d025f264362bf0009196269f9eaf87f2c6e738a2/mlx_metal-0.32.2-py3-none-macosx_26_0_arm64.whl", hash = "sha256:e6abeac9ac5265830c9c1541b6f96e9be37a85c2446763a46ad466c63a3837ab", size = 64367860, upload-time = "2026-08-25T10:31:28.056Z" },
 ]
-
-[[package]]
-name = "moelars"
-version = "0.0.1"
-source = { editable = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "pydantic" },
-    { name = "uvicorn" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "ruff" },
-    { name = "typesafe-sdk" },
-]
-escalate = [
-    { name = "anthropic" },
-]
-evals = [
-    { name = "datasets" },
-]
-llamacpp = [
-    { name = "llama-cpp-python" },
-]
-mcp = [
-    { name = "httpx" },
-    { name = "mcp" },
-]
-mlx = [
-    { name = "mlx-lm" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", marker = "extra == 'escalate'", specifier = ">=1.0" },
-    { name = "datasets", marker = "extra == 'evals'", specifier = ">=3.0" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
-    { name = "httpx", marker = "extra == 'mcp'", specifier = ">=0.27" },
-    { name = "llama-cpp-python", marker = "extra == 'llamacpp'", specifier = ">=0.3" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.2,<3" },
-    { name = "mlx-lm", marker = "extra == 'mlx'", specifier = ">=0.20" },
-    { name = "numpy", specifier = ">=1.26" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "typesafe-sdk", marker = "extra == 'dev'", specifier = ">=0.7" },
-    { name = "uvicorn", specifier = ">=0.30" },
-]
-provides-extras = ["mlx", "llamacpp", "evals", "dev", "mcp", "escalate"]
 
 [[package]]
 name = "multidict"

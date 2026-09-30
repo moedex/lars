@@ -6,7 +6,7 @@ import types
 
 import numpy as np
 
-from moelars.backends.llamacpp import LlamaCppBackend
+from lars.backends.llamacpp import LlamaCppBackend
 
 VOCAB = 8
 

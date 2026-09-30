@@ -1,12 +1,12 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from moelars.backends.mock import MockBackend
-from moelars.engine import Engine
-from moelars.server import create_app
+from lars.backends.mock import MockBackend
+from lars.engine import Engine
+from lars.server import create_app
 
 BODY = {
-    "model": "moelars-latest",
+    "model": "lars-latest",
     "state": "I was charged twice for my subscription.",
     "questions": {
         "refund": {"type": "noul", "instructions": "Is the customer asking for money back?"},
@@ -21,7 +21,7 @@ BODY = {
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     return TestClient(create_app(Engine(MockBackend())))
 
 
@@ -37,7 +37,7 @@ def test_systemone_wire_shape(client):
 
 
 def test_extensions_are_opt_in(client):
-    body = {**BODY, "moelars": {"permutations": 2, "abstain_margin": 0.1}}
+    body = {**BODY, "lars": {"permutations": 2, "abstain_margin": 0.1}}
     data = client.post("/v1/systemone", json=body).json()
     assert "order_sensitivity" in data["answers"]["department"]
     assert "abstain" in data["answers"]["department"]
@@ -54,12 +54,12 @@ def test_validation_error_shape(client):
 def test_models_endpoint(client):
     data = client.get("/v1/models").json()
     names = [m["name"] for m in data["models"]]
-    assert "moelars-latest" in names
+    assert "lars-latest" in names
     assert all({"name", "description", "release_date"} <= set(m) for m in data["models"])
 
 
 def test_auth_when_key_configured(monkeypatch):
-    monkeypatch.setenv("MOELARS_API_KEY", "secret")
+    monkeypatch.setenv("LARS_API_KEY", "secret")
     client = TestClient(create_app(Engine(MockBackend())))
     assert client.post("/v1/systemone", json=BODY).status_code == 401
     ok = client.post("/v1/systemone", json=BODY, headers={"Authorization": "Bearer secret"})
@@ -68,10 +68,10 @@ def test_auth_when_key_configured(monkeypatch):
 
 
 def test_request_over_the_row_budget_is_refused_before_inference(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     engine = Engine(MockBackend(), max_rows=4)
     engine._score = lambda *a: pytest.fail("the model ran")  # type: ignore[method-assign]
-    body = {**BODY, "moelars": {"permutations": 4}}  # 2 base rows + 4 permutation rows
+    body = {**BODY, "lars": {"permutations": 4}}  # 2 base rows + 4 permutation rows
     response = TestClient(create_app(engine)).post("/v1/systemone", json=body)
     assert response.status_code == 422
     assert response.json()["error_type"] == "invalid_request"
@@ -79,7 +79,7 @@ def test_request_over_the_row_budget_is_refused_before_inference(monkeypatch):
 
 
 def test_request_over_the_token_budget_is_refused(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     client = TestClient(create_app(Engine(MockBackend(), max_input_tokens=50)))
     response = client.post("/v1/systemone", json={**BODY, "state": "word " * 200})
     assert response.status_code == 422
@@ -87,16 +87,16 @@ def test_request_over_the_token_budget_is_refused(monkeypatch):
 
 
 def test_body_over_the_limit_is_413_with_request_ids(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     client = TestClient(create_app(Engine(MockBackend()), max_body_bytes=200))
     response = client.post("/v1/systemone", json={**BODY, "state": "x" * 500})
     assert response.status_code == 413
     assert response.json()["error_type"] == "invalid_request"
-    assert response.headers["x-typesafe-request-id"] == response.headers["x-moelars-request-id"]
+    assert response.headers["x-typesafe-request-id"] == response.headers["x-lars-request-id"]
 
 
 def test_auth_failure_carries_the_sdk_request_id(monkeypatch):
-    monkeypatch.setenv("MOELARS_API_KEY", "secret")
+    monkeypatch.setenv("LARS_API_KEY", "secret")
     response = TestClient(create_app(Engine(MockBackend()))).post("/v1/systemone", json=BODY)
     assert response.status_code == 401
     assert response.headers["x-typesafe-request-id"]
@@ -110,7 +110,7 @@ def test_slow_inference_does_not_block_health_checks(monkeypatch):
     import anyio
     import httpx
 
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     engine = Engine(MockBackend())
     release = threading.Event()
     evaluate = engine.evaluate
@@ -144,7 +144,7 @@ def test_slow_inference_does_not_block_health_checks(monkeypatch):
     assert results["post"].status_code == 200
 
 
-@pytest.mark.parametrize("model", ["moelars-latest", "jev-latest"])
+@pytest.mark.parametrize("model", ["lars-latest", "jev-latest"])
 def test_default_aliases_are_served(client, model):
     assert client.post("/v1/systemone", json={**BODY, "model": model}).status_code == 200
 

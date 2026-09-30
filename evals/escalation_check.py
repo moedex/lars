@@ -4,7 +4,7 @@
 
 Local answers are the calibrated probabilities a suite run dumped (`run_suite.py --dump-rows`),
 so no local model is loaded. Every test and validation row whose top probability is below
-`--max-below` is put to the hosted model once (`moelars.escalate.Escalator.pick`, the serving
+`--max-below` is put to the hosted model once (`lars.escalate.Escalator.pick`, the serving
 path), and its picks are cached in `--cache`, so a re-run or a lower threshold costs nothing.
 Then, for each threshold up to `--max-below`, rows below it are blended as the server blends
 them (`weight * one_hot(pick) + (1 - weight) * local`) and scored the way `evals/cascade.py`
@@ -22,9 +22,9 @@ from pathlib import Path
 
 import numpy as np
 
-from moelars.escalate import DEFAULT_MODEL, DEFAULT_WEIGHT, Escalator, resolve_api_key
-from moelars.evalset import read_examples
-from moelars.schema import SystemOneRequest
+from lars.escalate import DEFAULT_MODEL, DEFAULT_WEIGHT, Escalator, resolve_api_key
+from lars.evalset import read_examples
+from lars.schema import SystemOneRequest
 
 HERE = Path(__file__).resolve().parent
 THRESHOLDS = [0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
@@ -101,7 +101,7 @@ def main() -> int:
     args = parser.parse_args()
     key = resolve_api_key()
     if not key:
-        raise SystemExit("no API key (ANTHROPIC_API_KEY, MOELARS_ANTHROPIC_KEY_FILE, ~/.config/moelars/anthropic-key)")
+        raise SystemExit("no API key (ANTHROPIC_API_KEY, LARS_ANTHROPIC_KEY_FILE, ~/.config/lars/anthropic-key)")
     cache_path = args.cache or HERE / "results" / "escalation" / f"picks-{args.model}-{args.rows.name}.json"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}

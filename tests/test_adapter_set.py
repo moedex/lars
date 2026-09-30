@@ -12,7 +12,7 @@ from mlx.utils import tree_flatten  # noqa: E402
 from mlx_lm.models import qwen3  # noqa: E402
 from mlx_lm.tuner.utils import linear_to_lora_layers, load_adapters  # noqa: E402
 
-from moelars.backends.adapters import AdapterSet  # noqa: E402
+from lars.backends.adapters import AdapterSet  # noqa: E402
 
 ATTN = ["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj"]
 MLP = ["mlp.gate_proj", "mlp.up_proj", "mlp.down_proj"]

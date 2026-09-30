@@ -2,8 +2,8 @@ import argparse
 
 import pytest
 
-from moelars import presets
-from moelars.cli import _apply_preset, build_parser
+from lars import presets
+from lars.cli import _apply_preset, build_parser
 
 
 def test_preset_fills_unset_flags_and_explicit_flags_win():
@@ -34,5 +34,5 @@ def test_hub_ids_download_and_local_paths_do_not(tmp_path, monkeypatch):
     local = tmp_path / "cal.json"
     local.write_text("{}")
     assert presets.resolve_calibration(str(local)) == str(local)
-    assert presets.resolve_calibration("org/adapter/moelars-calibration.json") == "/cache/c.json"
-    assert calls == ["org/adapter", ("org/adapter", "moelars-calibration.json")]
+    assert presets.resolve_calibration("org/adapter/lars-calibration.json") == "/cache/c.json"
+    assert calls == ["org/adapter", ("org/adapter", "lars-calibration.json")]

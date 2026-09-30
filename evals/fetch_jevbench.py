@@ -1,4 +1,4 @@
-"""Convert a jev-bench config into moe-LARS eval JSONL. Requires `pip install moelars[evals]`."""
+"""Convert a jev-bench config into LARS eval JSONL. Requires `pip install lars-engine[evals]`."""
 
 from __future__ import annotations
 

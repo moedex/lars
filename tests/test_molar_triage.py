@@ -3,9 +3,9 @@
 import runpy
 from pathlib import Path
 
-from moelars.backends import load_backend
-from moelars.engine import Engine
-from moelars.evalset import evaluate, read_examples
+from lars.backends import load_backend
+from lars.engine import Engine
+from lars.evalset import evaluate, read_examples
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "molar_triage"
 

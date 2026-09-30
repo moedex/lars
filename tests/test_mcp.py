@@ -19,11 +19,11 @@ from fastapi.testclient import TestClient  # noqa: E402
 from mcp import Client  # noqa: E402
 from mcp.client.streamable_http import streamable_http_client  # noqa: E402
 
-from moelars.backends.mock import MockBackend  # noqa: E402
-from moelars.bridge import make_bridge  # noqa: E402
-from moelars.engine import Engine  # noqa: E402
-from moelars.lazy import LazyEngine, parse_duration  # noqa: E402
-from moelars.server import create_app  # noqa: E402
+from lars.backends.mock import MockBackend  # noqa: E402
+from lars.bridge import make_bridge  # noqa: E402
+from lars.engine import Engine  # noqa: E402
+from lars.lazy import LazyEngine, parse_duration  # noqa: E402
+from lars.server import create_app  # noqa: E402
 
 KEY = "test-key"
 TEXT = "Traceback (most recent call last): AssertionError in test_payments.py; 1 failed, 88 passed"
@@ -33,7 +33,7 @@ OPTIONS = {"backend": "APIs, database, payments", "frontend": "UI, CSS, browser 
 @pytest.fixture
 def server(monkeypatch):
     """A real server on a free port: MCP over Streamable HTTP needs a live HTTP endpoint."""
-    monkeypatch.setenv("MOELARS_API_KEY", KEY)
+    monkeypatch.setenv("LARS_API_KEY", KEY)
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -59,14 +59,14 @@ def _mcp_client(url: str, key: str | None = KEY) -> Client:
 async def _call_all(client: Client) -> dict:
     async with client:
         names = sorted(tool.name for tool in (await client.list_tools()).tools)
-        check = await client.call_tool("moelars_check", {"text": TEXT, "claim": "A test failed"})
-        classify = await client.call_tool("moelars_classify", {"text": TEXT, "question": "Which area?",
+        check = await client.call_tool("lars_check", {"text": TEXT, "claim": "A test failed"})
+        classify = await client.call_tool("lars_classify", {"text": TEXT, "question": "Which area?",
                                                                "options": OPTIONS})
-        decide = await client.call_tool("moelars_decide", {"state": TEXT, "questions": {
+        decide = await client.call_tool("lars_decide", {"state": TEXT, "questions": {
             "failed": {"type": "noul", "instructions": "A test failed"},
             "area": {"type": "choice", "instructions": "Which area?", "criteria": OPTIONS}}})
-        status = await client.call_tool("moelars_status", {})
-        bad = await client.call_tool("moelars_decide", {"state": TEXT, "questions": {
+        status = await client.call_tool("lars_status", {})
+        bad = await client.call_tool("lars_decide", {"state": TEXT, "questions": {
             "q": {"type": "choice", "instructions": "?", "criteria": {}}}})
     return {"names": names, "check": check, "classify": classify, "decide": decide, "status": status, "bad": bad}
 
@@ -79,7 +79,7 @@ def _expected(url: str) -> dict:
 
 
 def _assert_tools_match_http(results: dict, expected: dict) -> None:
-    assert results["names"] == ["moelars_check", "moelars_classify", "moelars_decide", "moelars_status"]
+    assert results["names"] == ["lars_check", "lars_classify", "lars_decide", "lars_status"]
     assert results["check"].structured_content["p_yes"] == pytest.approx(expected["answers"]["failed"]["noul"])
     classify = results["classify"].structured_content
     assert classify["choice"] == expected["answers"]["area"]["choice"]
@@ -116,14 +116,14 @@ def test_the_bridge_forwards_to_the_server_and_reports_it_down(server):
 
     async def down():
         async with Client(make_bridge("http://127.0.0.1:9", KEY)) as client:
-            return await client.call_tool("moelars_check", {"text": "x", "claim": "y"})
+            return await client.call_tool("lars_check", {"text": "x", "claim": "y"})
 
     result = anyio.run(down)
     assert result.is_error and "not reachable" in result.content[0].text
 
     async def wrong_key():
         async with Client(make_bridge(server, "nope")) as client:
-            return await client.call_tool("moelars_check", {"text": "x", "claim": "y"})
+            return await client.call_tool("lars_check", {"text": "x", "claim": "y"})
 
     result = anyio.run(wrong_key)
     assert result.is_error and "API key" in result.content[0].text
@@ -146,7 +146,7 @@ def test_lazy_engine_loads_on_use_and_unloads_when_idle():
 
 
 def test_server_sweeps_an_idle_model_and_reloads_it(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     holder = LazyEngine(lambda: Engine(MockBackend()), idle_unload=0.05)
     body = {"state": "x", "questions": {"q": {"type": "noul", "instructions": "y"}}}
     with TestClient(create_app(holder, sweep_seconds=0.02)) as client:
@@ -160,10 +160,10 @@ def test_server_sweeps_an_idle_model_and_reloads_it(monkeypatch):
 
 
 def test_key_file_is_read_per_request(tmp_path, monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     key_file = tmp_path / "key"
     key_file.write_text("from-file\n")
-    monkeypatch.setenv("MOELARS_API_KEY_FILE", str(key_file))
+    monkeypatch.setenv("LARS_API_KEY_FILE", str(key_file))
     client = TestClient(create_app(Engine(MockBackend())))
     assert client.get("/v1/status").status_code == 401
     assert client.get("/v1/status", headers={"authorization": "Bearer from-file"}).status_code == 200
@@ -171,8 +171,8 @@ def test_key_file_is_read_per_request(tmp_path, monkeypatch):
 
 
 def test_service_plist_and_key(tmp_path, monkeypatch):
-    from moelars import service
-    from moelars.cli import build_parser
+    from lars import service
+    from lars.cli import build_parser
 
     adapter = tmp_path / "adapter"
     adapter.mkdir()
@@ -184,7 +184,7 @@ def test_service_plist_and_key(tmp_path, monkeypatch):
     assert argv[argv.index("--adapter") + 1] == str(adapter.resolve())  # launchd starts the agent in /
     assert argv[argv.index("--model") + 1] == "org/model"
     key_file = service.ensure_api_key(tmp_path / "cfg" / "api-key")
-    plist = service.build_plist(["python", "-m", "moelars", *argv], api_key_file=key_file, log_dir=tmp_path)
+    plist = service.build_plist(["python", "-m", "lars", *argv], api_key_file=key_file, log_dir=tmp_path)
     assert plist["KeepAlive"] == {"SuccessfulExit": False} and plist["RunAtLoad"] is True
     assert plist["EnvironmentVariables"]["HF_HUB_OFFLINE"] == "1"
     key = key_file.read_text().strip()
@@ -194,10 +194,10 @@ def test_service_plist_and_key(tmp_path, monkeypatch):
 
 
 def test_named_calibrator_dir_reaches_the_mcp_tools(tmp_path, monkeypatch):
-    from moelars.calibration import Calibrator
-    from moelars.cli import load_named_calibrators
+    from lars.calibration import Calibrator
+    from lars.cli import load_named_calibrators
 
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     Calibrator(platt={"noul": (4.0, 0.0)}).save(tmp_path / "ci_failure.json")
     engine = Engine(MockBackend(), named_calibrators=load_named_calibrators(str(tmp_path)))
     app = create_app(engine, mcp=True)
@@ -206,10 +206,10 @@ def test_named_calibrator_dir_reaches_the_mcp_tools(tmp_path, monkeypatch):
         http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app))
         async with Client(streamable_http_client("http://127.0.0.1:8600/mcp", http_client=http)) as c:
             claim = {"text": TEXT, "claim": "A test failed"}
-            plain = await c.call_tool("moelars_check", claim)
-            named = await c.call_tool("moelars_check", {**claim, "decision": "ci_failure"})
-            bad = await c.call_tool("moelars_check", {**claim, "decision": "nope"})
-            status = await c.call_tool("moelars_status", {})
+            plain = await c.call_tool("lars_check", claim)
+            named = await c.call_tool("lars_check", {**claim, "decision": "ci_failure"})
+            bad = await c.call_tool("lars_check", {**claim, "decision": "nope"})
+            status = await c.call_tool("lars_status", {})
         return plain, named, bad, status
 
     with TestClient(app):  # runs the lifespan, which starts the MCP session manager
@@ -221,10 +221,10 @@ def test_named_calibrator_dir_reaches_the_mcp_tools(tmp_path, monkeypatch):
 
 
 def test_check_features_reach_the_fitted_fusion(tmp_path, monkeypatch):
-    from moelars.calibration import Calibrator
-    from moelars.cli import load_named_calibrators
+    from lars.calibration import Calibrator
+    from lars.cli import load_named_calibrators
 
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     fusion = {"noul": {"features": ["job_rerun_rate"], "weights": [1.0, -6.0], "bias": 0.0}}
     Calibrator(platt={"noul": (1.0, 0.0)}, fusion=fusion).save(tmp_path / "ci_failure.json")
     engine = Engine(MockBackend(), named_calibrators=load_named_calibrators(str(tmp_path)))
@@ -234,10 +234,10 @@ def test_check_features_reach_the_fitted_fusion(tmp_path, monkeypatch):
         http = httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app))
         async with Client(streamable_http_client("http://127.0.0.1:8600/mcp", http_client=http)) as c:
             claim = {"text": TEXT, "claim": "A test failed", "decision": "ci_failure"}
-            plain = await c.call_tool("moelars_check", claim)
-            flaky = await c.call_tool("moelars_check", {**claim, "features": {"job_rerun_rate": 0.9}})
-            steady = await c.call_tool("moelars_check", {**claim, "features": {"job_rerun_rate": 0.0}})
-            partial = await c.call_tool("moelars_check", {**claim, "features": {"other": 1.0}})
+            plain = await c.call_tool("lars_check", claim)
+            flaky = await c.call_tool("lars_check", {**claim, "features": {"job_rerun_rate": 0.9}})
+            steady = await c.call_tool("lars_check", {**claim, "features": {"job_rerun_rate": 0.0}})
+            partial = await c.call_tool("lars_check", {**claim, "features": {"other": 1.0}})
         return plain, flaky, steady, partial
 
     with TestClient(app):

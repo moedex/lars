@@ -1,6 +1,6 @@
 # Closeout to v0.1.0, planned 2026-09-25
 
-Goal: a tagged GitHub release, `v0.1.0` on `moedex/moelars`, that serves the most accurate
+Goal: a tagged GitHub release, `v0.1.0` on `moedex/lars`, that serves the most accurate
 configuration that answers the `load_cost.py` request in under 2 s warm on this machine
 (128 GB M5 Max). The adapters go on the HF Hub under `moedex`. Check boxes as work lands; the
 newest state wins over `HANDOFF.md`.
@@ -97,7 +97,7 @@ and the better validation Brier (0.3093 against 0.3114), so it is the default. S
 
 ### 2b. Serving, only if the gate passes (it did not: the multi-adapter code stays, with no `30b-duo` preset)
 
-- [x] `MLXBackend` takes several adapters (`moelars.backends.adapters.AdapterSet`; swapping matches each adapter loaded alone, tested on a tiny Qwen3): load the base once, build LoRA layers for the
+- [x] `MLXBackend` takes several adapters (`lars.backends.adapters.AdapterSet`; swapping matches each adapter loaded alone, tested on a tiny Qwen3): load the base once, build LoRA layers for the
   union of the adapters' keys (experts ⊇ attention), keep each adapter's weights in memory,
   and swap them with `model.load_weights(..., strict=False)` between passes. Expert keys stay
   zero while the attention-only adapter is loaded.
@@ -126,7 +126,7 @@ and the better validation Brier (0.3093 against 0.3114), so it is the default. S
 Each fix gets a test and a status line in `CODEBASE-REVIEW.md`, same format as M1.
 
 - [x] **M3** Reject a request `model` that isn't the loaded model's ID or its documented
-  alias (`moelars` or the preset name); 400 `invalid_request`.
+  alias (`lars` or the preset name); 400 `invalid_request`.
 - [x] **M4** Split the prompt at the offset where the sentinel was inserted, not at the first
   match; test with the sentinel inside state.
 - [x] **M5** Apply constraints until nothing changes (with an iteration cap) and check the
@@ -167,18 +167,18 @@ Each fix gets a test and a status line in `CODEBASE-REVIEW.md`, same format as M
   `--calibration FILE` to `evals/run_suite.py`. Report the pooled number as the headline and
   per-config as secondary. (Raw and per-config calibrated accuracy differ only on
   civil_comments, so expect about 0.75.)
-- [x] `moelars serve --preset 30b` (no `30b-duo`: §2 failed) resolves the model, the
+- [x] `lars serve --preset 30b` (no `30b-duo`: §2 failed) resolves the model, the
   adapter from the Hub (`huggingface_hub.snapshot_download`) and the pooled calibrator.
   `--backend mock` stays the default with no preset. Add a preset smoke test that uses the
   mock backend in CI.
-- [ ] HF Hub: `moedex/moelars-qwen3-30b-a3b-lora-attn` (attention seed 1, `checkpoints/lora-30b-c-s1`), with
+- [ ] HF Hub: `moedex/lars-qwen3-30b-a3b-lora-attn` (attention seed 1, `checkpoints/lora-30b-c-s1`), with
   `adapter_config.json`, safetensors, the calibrator, and a model card: base model, recipe and
   seed, training sources and licenses from §5, the jev-bench table, known limitations, and the
   data policy (no Jev-labeled data).
 - [ ] Docs: README quickstart using the preset, the headline table, the civil_comments caveat,
   and the Docker images (mock, and llama.cpp on CPU: first hardware pass 2026-09-25 found
   and fixed zeroed logits; Qwen3-4B Q4_K_M boolq 0.84, sst5 0.48 on 100 rows). Update `HANDOFF.md` and `evals/RESULTS.md`.
-- [ ] Bump `version` to 0.1.0 in `pyproject.toml` and `src/moelars/__init__.py`, and add a
+- [ ] Bump `version` to 0.1.0 in `pyproject.toml` and `src/lars/__init__.py`, and add a
   `CHANGELOG.md` entry.
 - [ ] Final checks on a clean checkout: `uv sync`, `ruff`, `pytest` (MLX tests here), CI green
   on `main`, and a quiet `load_cost.py` run with the preset under 2 s.

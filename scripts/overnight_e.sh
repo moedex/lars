@@ -27,7 +27,7 @@ wait_for() {  # wait_for <seconds> <description> <shell test>
     sleep 60
   done
 }
-busy='pgrep -f "moelars.train.lora|evals/run_suite.py|evals/ensemble_check.py" >/dev/null'
+busy='pgrep -f "lars.train.lora|evals/run_suite.py|evals/ensemble_check.py" >/dev/null'
 
 step "waiting for the corpus-E seed-1 queue"
 wait_for 43200 "seed 1" 'grep -q "ALL DONE\|STOP" logs/queue-corpus-e-s1.log' || exit 1

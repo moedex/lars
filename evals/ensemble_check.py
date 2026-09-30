@@ -18,11 +18,11 @@ from pathlib import Path
 
 import numpy as np
 
-from moelars.backends.mlx import MLXBackend
-from moelars.calibration import Calibrator
-from moelars.engine import EnsembleEngine
-from moelars.evalset import read_examples
-from moelars.schema import ChoiceAnswer, NoulAnswer, SystemOneRequest
+from lars.backends.mlx import MLXBackend
+from lars.calibration import Calibrator
+from lars.engine import EnsembleEngine
+from lars.evalset import read_examples
+from lars.schema import ChoiceAnswer, NoulAnswer, SystemOneRequest
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))

@@ -18,7 +18,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from moelars.train.data import from_jev_bench, read_records, write_records
+from lars.train.data import from_jev_bench, read_records, write_records
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_corpus_c import DROP_EXACT, STREAMS, eval_states  # noqa: E402

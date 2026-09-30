@@ -1,6 +1,6 @@
 # Results
 
-All moe-LARS numbers are measured in this repository. Jev numbers are quoted from the
+All LARS numbers are measured in this repository. Jev numbers are quoted from the
 jev-bench maintainers' published run of `jev-1.13.0` on the full test splits, recorded
 in `evals/jev_published.json`. See `DESIGN.md` section 8 for why we never call that API.
 
@@ -14,16 +14,16 @@ for the suite was 30 minutes. Full table: `evals/results/qwen3-4b-instruct-2507-
 
 ### Macro averages, calibrated
 
-| scope | n | moe-LARS acc | Jev acc | moe-LARS ECE | Jev ECE | moe-LARS Brier | Jev Brier |
+| scope | n | LARS acc | Jev acc | LARS ECE | Jev ECE | LARS Brier | Jev Brier |
 |---|---|---|---|---|---|---|---|
 | all | 22 | 0.662 | 0.733 | **0.088** | 0.113 | 0.404 | 0.349 |
 | choice | 9 | 0.657 | 0.770 | **0.084** | 0.112 | 0.386 | 0.345 |
 | score | 6 | 0.466 | 0.503 | **0.116** | 0.197 | **0.645** | 0.662 |
 | noul | 7 | 0.837 | 0.881 | 0.069 | 0.043 | 0.222 | 0.085 |
 
-### Where moe-LARS is ahead
+### Where LARS is ahead
 
-| config | moe-LARS acc | Jev acc | note |
+| config | LARS acc | Jev acc | note |
 |---|---|---|---|
 | chaosnli | 0.685 | 0.615 | scored against 100-annotator vote shares; Brier 0.165 vs 0.583 |
 | helpsteer2_verbosity | 0.585 | 0.341 | Brier 0.619 vs 0.793 |
@@ -31,7 +31,7 @@ for the suite was 30 minutes. Full table: `evals/results/qwen3-4b-instruct-2507-
 
 ### Where the gap is largest
 
-| config | moe-LARS acc | Jev acc | why |
+| config | LARS acc | Jev acc | why |
 |---|---|---|---|
 | mmlu | 0.670 | 0.923 | world knowledge, set by the 4B base model |
 | strategyqa_closed | 0.570 | 0.785 | closed-book multi-hop, same cause |
@@ -67,9 +67,9 @@ for the suite was 30 minutes. Full table: `evals/results/qwen3-4b-instruct-2507-
   nearly everything toxic and calibration pushed it back to the base rate. Jev's 0.729
   is below the majority baseline, so neither number says much about toxicity detection.
   Read this config through its Brier and coverage columns instead.
-- **Brier definitions may differ for noul.** moe-LARS sums squared error over both
+- **Brier definitions may differ for noul.** LARS sums squared error over both
   outcomes, which is twice the single-probability Brier. If jev-bench reports the
-  single-probability form for noul, halve the moe-LARS noul Brier for comparison
+  single-probability form for noul, halve the LARS noul Brier for comparison
   (0.222 becomes 0.111 against Jev's 0.085). Choice and score sums are standard.
 - Older Qwen3 (2507) rather than Qwen3.5, because that is what mlx-community had
   quantized on the day.
@@ -91,7 +91,7 @@ Test shard: 1,100 rows sampled across all 22 jev-bench test configs, about 50 ea
 These are raw head outputs versus raw backbone outputs, with no per-config calibration
 on either side. Artifacts: `evals/results/tier-b-qwen3-4b.head.npz`,
 `tier-b-qwen3-4b.history.json`, `tier-b-qwen3-4b-test.json`. The projection matrix is
-not committed; it is `moelars.train.features.projection(2560, 512, seed=0)`.
+not committed; it is `lars.train.features.projection(2560, 512, seed=0)`.
 
 | scope | acc base | acc head | ECE base | ECE head | Brier base | Brier head |
 |---|---|---|---|---|---|---|
@@ -250,9 +250,9 @@ head v1, and head v2, all with per-config calibration: `evals/results/compare-qw
   strategyqa_closed, arc_challenge) 2.5; reading and NLI (mnli, stsb,
   strategyqa_grounded, paws, boolq, fever) 2.1; high-K routing (banking77, clinc150,
   massive, ledgar) 1.6; ordinal scores (sst5, yelp5, helpsteer2_helpfulness) 1.1;
-  sms_spam 0.2; offset by 3.2 points of configs where moe-LARS is ahead. civil_comments
+  sms_spam 0.2; offset by 3.2 points of configs where LARS is ahead. civil_comments
   is 1.8 of those 3.2 and is the majority baseline (see the Tier A caveats), so the
-  headline flatters moe-LARS by about that much.
+  headline flatters LARS by about that much.
 - **Latency is not reported for this run.** Another job shared the GPU while it ran;
   three configs came out five to eight times slower than head v1 on identical compute.
   Load time, peak memory, and warm latency are measured separately by
@@ -310,7 +310,7 @@ test with the real mlx-lm cache classes pins it.
 
 Three runs from `scripts/queue_lora.sh`, all with per-config calibration:
 
-- **LoRA** (`moelars.train.lora`): rank 8, scale 20, every layer, lr 2e-5 with warmup and
+- **LoRA** (`lars.train.lora`): rank 8, scale 20, every layer, lr 2e-5 with warmup and
   cosine decay, one epoch over the same 14,285-record corpus and held-out split as head
   v2 (1,095 steps, 113 minutes, about 27 GB peak). Loss is cross-entropy plus Brier on
   the K label logits at the answer position, with options reshuffled per presentation.
@@ -343,7 +343,7 @@ Per-config tables: `evals/results/qwen3-4b-instruct-2507-4bit-{lora,lora-head}.m
 - **LoRA ties Jev on macro accuracy (0.731 against 0.733) and beats it on Brier (0.317
   against 0.349) and ECE (0.077 against 0.113).** It is +4.2 over head v2 and +6.9 over
   Tier A. The civil_comments caveat above still applies: that config is the majority
-  baseline and is worth about 1.8 macro points of moe-LARS's lead where it leads.
+  baseline and is worth about 1.8 macro points of LARS's lead where it leads.
 - **The gain is on question forms the corpus covers**: seen sources 0.775 against 0.668
   for Tier A. Largest moves: measuring_hate_speech +36, go_emotions +23, clinc150 +16.5,
   massive +15, banking77 +12.5, ledgar +11, mnli +10.
@@ -359,7 +359,7 @@ Per-config tables: `evals/results/qwen3-4b-instruct-2507-4bit-{lora,lora-head}.m
   accuracy on the corpus is already 0.90, and no head epoch beat the adapter alone on
   held-out Brier (0.479 alone, best epoch 0.485). The head's selection loop did not
   compare against no head at all and saved that slightly worse epoch; it now does
-  (`moelars.train.residual`, tested). By config the head still helps high-K routing
+  (`lars.train.residual`, tested). By config the head still helps high-K routing
   (massive +3.0, ledgar +4.5, mnli +2.0) and hurts elsewhere (mmlu -4.5, chaosnli -3.0),
   which suggests gating it on K. That rule was read off test, so it is a hypothesis to
   check on held-out data, not a result.
@@ -441,7 +441,7 @@ globally or per primitive, then applied to test. The dumps are committed under
   ID (codebase review M14), which holds here because both suites read the same files.
 
 **LoRA on the 30B-A3B.** mlx-lm's `qwen3_moe` block routes with argpartition indices
-that carry no `stop_gradient`, so the first backward pass failed; `moelars.train.lora`
+that carry no `stop_gradient`, so the first backward pass failed; `lars.train.lora`
 now patches it (same forward pass, tested). Two 400-record probes:
 
 | keys | trainable params | speed | peak memory | held-out (55 rows) before, after 31 steps |
@@ -680,7 +680,7 @@ exceed its 192-token option budget), so the comparison is over the other 21 conf
 
 Attention LoRA seed 1 (corpus C) with one calibrator for every config, fitted on the pooled
 validation rows of all 22 configs (4,120 rows; `calibration/served/lora-30b-c-s1.json`),
-which is what `moelars serve --preset 30b` loads:
+which is what `lars serve --preset 30b` loads:
 
 | calibration | macro acc | Brier | ECE |
 |---|---|---|---|
@@ -815,8 +815,8 @@ the serving path, then blended as the server blends (`weight * one_hot(pick) + (
 | 0.8 (the first serving default) | 0.750 | 0.388 | 43% |
 | 0.9 | 0.744 | 0.397 | 54% |
 
-- Escalating everything below a threshold hurts at every threshold. On the rows moe-LARS is
-  unsure of, Haiku is right less often than moe-LARS (0.554 against 0.595 below 0.9): those rows
+- Escalating everything below a threshold hurts at every threshold. On the rows LARS is
+  unsure of, Haiku is right less often than LARS (0.554 against 0.595 below 0.9): those rows
   are hard for both, and Haiku does not know each benchmark's label conventions (go_emotions
   -0.150 at 0.5). A one-hot blend also wrecks calibration; weight 0.5 is better (0.761, Brier 0.299)
   but still below local.

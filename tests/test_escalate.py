@@ -6,12 +6,12 @@ import anyio
 import pytest
 from fastapi.testclient import TestClient
 
-from moelars.backends.mock import MockBackend
-from moelars.calibration import Calibrator
-from moelars.engine import Engine
-from moelars.escalate import Escalator, resolve_api_key, top_probability
-from moelars.schema import SystemOneRequest
-from moelars.server import create_app
+from lars.backends.mock import MockBackend
+from lars.calibration import Calibrator
+from lars.engine import Engine
+from lars.escalate import Escalator, resolve_api_key, top_probability
+from lars.schema import SystemOneRequest
+from lars.server import create_app
 
 BODY = {"state": "The build failed: 3 tests errored.", "questions": {
     "failed": {"type": "noul", "instructions": "A test failed"},
@@ -59,7 +59,7 @@ def test_only_decisions_that_opt_in_escalate_by_default():
                           decisions={"knowledge": {"below": 1.01, "weight": 0.5}})
     local, out = _run(escalator)
     assert not messages.prompts and out == local  # server default 0: nothing escalates
-    body = {**BODY, "moelars": {"calibrators": {"area": "knowledge"}}}
+    body = {**BODY, "lars": {"calibrators": {"area": "knowledge"}}}
     local, out = _run(escalator, body)
     assert len(messages.prompts) == 1 and out.answers["area"].escalated["answer"] == "y"
     assert out.answers["area"].probabilities["y"] == round(0.5 + 0.5 * local.answers["area"].probabilities["y"], 4)
@@ -71,7 +71,7 @@ def test_threshold_opt_out_and_failures_keep_local_answers():
     local, out = _run(escalator)
     assert not messages.prompts and out == local
     escalator, messages = _escalator()
-    local, out = _run(escalator, {**BODY, "moelars": {"escalate": False}})
+    local, out = _run(escalator, {**BODY, "lars": {"escalate": False}})
     assert not messages.prompts and out == local
     escalator, _ = _escalator(fail=True)
     local, out = _run(escalator)
@@ -81,20 +81,20 @@ def test_threshold_opt_out_and_failures_keep_local_answers():
 
 
 def test_key_is_resolved_at_startup_and_absent_key_means_no_escalation(tmp_path, monkeypatch):
-    from moelars.cli import _escalator_from_args, build_parser
+    from lars.cli import _escalator_from_args, build_parser
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("MOELARS_ANTHROPIC_KEY_FILE", str(tmp_path / "missing"))
+    monkeypatch.setenv("LARS_ANTHROPIC_KEY_FILE", str(tmp_path / "missing"))
     assert resolve_api_key() is None
     args = build_parser().parse_args(["serve", "--escalate"])
     escalator, note = _escalator_from_args(args)
     assert escalator is None and "no API key" in note
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     client = TestClient(create_app(Engine(MockBackend()), escalator=None, escalation_note=note))
     assert client.get("/v1/status").json()["escalation"]["enabled"] is False
     assert "escalated" not in str(client.post("/v1/systemone", json=BODY).json())
     (tmp_path / "key").write_text("sk-test\n")
-    monkeypatch.setenv("MOELARS_ANTHROPIC_KEY_FILE", str(tmp_path / "key"))
+    monkeypatch.setenv("LARS_ANTHROPIC_KEY_FILE", str(tmp_path / "key"))
     assert resolve_api_key() == "sk-test"
     pytest.importorskip("anthropic")
     escalator, note = _escalator_from_args(args)
@@ -102,7 +102,7 @@ def test_key_is_resolved_at_startup_and_absent_key_means_no_escalation(tmp_path,
 
 
 def test_server_escalates_after_the_local_pass(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     escalator, messages = _escalator()
     client = TestClient(create_app(Engine(MockBackend()), escalator=escalator))
     body = client.post("/v1/systemone", json=BODY).json()

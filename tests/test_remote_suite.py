@@ -8,7 +8,7 @@ import httpx
 import numpy as np
 import pytest
 
-from moelars.evalset import Example, calibrate, evaluate
+from lars.evalset import Example, calibrate, evaluate
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "evals"))
 from remote import PROBABILITY_FLOOR, Refused, RemoteClient, RemoteEngine  # noqa: E402

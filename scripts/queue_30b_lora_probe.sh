@@ -13,7 +13,7 @@ step() { echo "=== $(date '+%H:%M:%S') $1"; }
 for keys in attn attn+experts; do
   tag=${keys/+/-}
   step "lora-30b-probe-$tag"
-  $UV run python -m moelars.train.lora --model $M30 --keys $keys --records $RECORDS --limit 400 --eval-every 50 \
+  $UV run python -m lars.train.lora --model $M30 --keys $keys --records $RECORDS --limit 400 --eval-every 50 \
     --out checkpoints/lora-30b-probe-$tag > logs/lora-30b-probe-$tag.log 2>&1 || echo "probe $tag failed; see its log"
 done
 step "ALL DONE"

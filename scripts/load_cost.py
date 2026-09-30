@@ -17,9 +17,9 @@ from pathlib import Path
 
 import mlx.core as mx
 
-from moelars.backends.mlx import MLXBackend
-from moelars.engine import Engine, EnsembleEngine
-from moelars.schema import SystemOneRequest
+from lars.backends.mlx import MLXBackend
+from lars.engine import Engine, EnsembleEngine
+from lars.schema import SystemOneRequest
 
 REQUEST = SystemOneRequest(
     state="Help! My payouts have been failing for 3 days. I am losing sales.",

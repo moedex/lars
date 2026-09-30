@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from moelars.train.data import (
+from lars.train.data import (
     Record,
     from_jev_bench,
     from_open_jev,

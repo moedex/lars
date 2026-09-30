@@ -1,7 +1,7 @@
-# moe-LARS as a login service with an MCP endpoint
+# LARS as a login service with an MCP endpoint
 
-Status: built. The code is in `moelars.mcp_server`, `moelars.lazy`, `moelars.bridge` and
-`moelars.service`, with tests in `tests/test_mcp.py`. Goal: moe-LARS starts with the Mac,
+Status: built. The code is in `lars.mcp_server`, `lars.lazy`, `lars.bridge` and
+`lars.service`, with tests in `tests/test_mcp.py`. Goal: LARS starts with the Mac,
 stays out of the way, and coding agents (Claude Code, Codex, anything that speaks MCP) can
 ask it typed questions and get calibrated answers back.
 
@@ -12,13 +12,13 @@ API key by default.
 
 ```
 launchd (LaunchAgent, at login)
-  └── moelars serve --preset ... --mcp --idle-unload 15m      one process, 127.0.0.1:8600
+  └── lars serve --preset ... --mcp --idle-unload 15m      one process, 127.0.0.1:8600
         ├── POST /v1/systemone     existing HTTP API (SDKs, scripts)
         ├── GET  /healthz, /v1/models
         └── /mcp                   MCP over Streamable HTTP, same engine, same one-at-a-time queue
 
 agents ── MCP over HTTP ──> http://127.0.0.1:8600/mcp
-agents without HTTP MCP ── stdio ──> moelars mcp-bridge ── HTTP ──> the same server
+agents without HTTP MCP ── stdio ──> lars mcp-bridge ── HTTP ──> the same server
 ```
 
 **One process for every agent.** MCP's stdio transport has each client spawn its own server.
@@ -29,8 +29,8 @@ concurrent agents queue instead of racing on the model.
 
 ## 1. MCP endpoint
 
-- `moelars serve --mcp` mounts an MCP server at `/mcp`, built with the official `mcp` Python
-  SDK (`FastMCP(...).streamable_http_app()`), in a new optional extra: `moelars[mcp]`. The
+- `lars serve --mcp` mounts an MCP server at `/mcp`, built with the official `mcp` Python
+  SDK (`FastMCP(...).streamable_http_app()`), in a new optional extra: `lars-engine[mcp]`. The
   tools call the same `Engine` object as `/v1/systemone`, through the same limiter.
 - Stateless mode (`stateless_http=True`): every tool call is independent, so there is no
   session state to lose on restart.
@@ -40,13 +40,13 @@ the agent chooses tools from these descriptions:
 
 | tool | input | output |
 |---|---|---|
-| `moelars_check` | `text`, `claim` | `p_yes`, `confidence` |
-| `moelars_classify` | `text`, `question`, `options` (name → description) | `choice`, `probabilities`, `confidence` |
-| `moelars_decide` | the full System One request: `state`, `questions` (noul, choice, score, multi), optional `moelars` extensions | the full System One response |
-| `moelars_status` | none | model, adapter, calibrator, loaded or unloaded, queue depth, version |
+| `lars_check` | `text`, `claim` | `p_yes`, `confidence` |
+| `lars_classify` | `text`, `question`, `options` (name → description) | `choice`, `probabilities`, `confidence` |
+| `lars_decide` | the full System One request: `state`, `questions` (noul, choice, score, multi), optional `lars` extensions | the full System One response |
+| `lars_status` | none | model, adapter, calibrator, loaded or unloaded, queue depth, version |
 
 - The two simple tools cover most agent uses: "does this log show a failure?", "is this
-  diff risky?", "which area does this issue belong to?" `moelars_decide` is for callers who
+  diff risky?", "which area does this issue belong to?" `lars_decide` is for callers who
   want several questions answered over one state in one pass.
 - Results come back as MCP structured content with an output schema, plus a short text
   rendering.
@@ -64,7 +64,7 @@ the agent chooses tools from these descriptions:
   localhost. The MCP spec requires this for local HTTP servers: without it, any web page
   open in a browser could reach the model through DNS rebinding. The same check goes on
   `/v1/systemone`.
-- Optional bearer token: `MOELARS_API_KEY` already gates the HTTP API, and `/mcp` reuses it.
+- Optional bearer token: `LARS_API_KEY` already gates the HTTP API, and `/mcp` reuses it.
   Clients send it as a header (for Claude Code, `claude mcp add --header`).
 - Logs record request IDs, token counts and latency, never state text. Agents will send
   code and logs.
@@ -76,7 +76,7 @@ You'd rather it use less than 18 GB, and an agent calls it in bursts.
 - `--idle-unload 15m`: drop the model after 15 idle minutes; the next request loads it again.
   Measured loads with a warm page cache take 0.8 to 2.9 s, so the first question after an idle
   spell costs about 3 s and the rest cost the usual 0.3 s.
-- `/healthz` and `moelars_status` answer while unloaded, without loading.
+- `/healthz` and `lars_status` answer while unloaded, without loading.
 - Verified on real MLX (Qwen3.5-4B, 2026-09-28): dropping the engine and calling
   `mx.clear_cache()` returns every MLX buffer (active memory 2.37 GB to 0). The process
   footprint went from 3.2 GB to 0.96 GB, the rest being the Python runtime, MLX and the
@@ -92,32 +92,32 @@ copy of the Hugging Face cache and its own Python environment, and Metal access 
 daemon is worth verifying first. An agent runs as you, with your cache, venv and GPU
 session, which is all a coding agent needs, since agents only run once you're logged in.
 
-- `moelars service install [serve options]` writes
-  `~/Library/LaunchAgents/dev.moelars.serve.plist` and loads it with
+- `lars service install [serve options]` writes
+  `~/Library/LaunchAgents/dev.lars.serve.plist` and loads it with
   `launchctl bootstrap gui/$(id -u)`. The plist records:
-  - **Program:** the absolute path of the installed `moelars` executable, plus the serve
+  - **Program:** the absolute path of the installed `lars` executable, plus the serve
     options.
   - **Start and restart:** `RunAtLoad`, and `KeepAlive` on crash (`SuccessfulExit: false`)
     with `ThrottleInterval: 30`, so a crashing server can't spin.
   - **Environment:** `HF_HUB_OFFLINE=1`, so boot never waits on the network. The weights
     must already be in the cache; `install` checks that.
-  - **Also in the environment:** `MOELARS_MLX_CACHE_GB`, and `MOELARS_API_KEY` if you set
+  - **Also in the environment:** `LARS_MLX_CACHE_GB`, and `LARS_API_KEY` if you set
     one.
-  - **Logs:** `~/Library/Logs/moelars/serve.log` and `serve.err.log`.
-- Also `moelars service start | stop | restart | status | logs | uninstall`, thin wrappers
+  - **Logs:** `~/Library/Logs/lars/serve.log` and `serve.err.log`.
+- Also `lars service start | stop | restart | status | logs | uninstall`, thin wrappers
   over `launchctl` (`kickstart -k`, `bootout`, `print`).
 - **Needs verifying:** `ProcessType`. launchd may run a background agent at lower priority,
   which could slow GPU work; measure latency as `Standard` against `Interactive`.
 - Run it from a fixed install (`uv tool install ./` into its own environment), not the repo
   checkout. Then `uv sync` during development can't swap code under the running service,
-  and an upgrade is `uv tool install` plus `moelars service restart`.
+  and an upgrade is `uv tool install` plus `lars service restart`.
 
 ## 5. What it serves
 
 - Today: `--adapter checkpoints/lora-30b-c-s1 --calibration calibration/served/lora-30b-c-s1.json`
   (the current single-adapter default).
 - Once the adapter is on the Hub: `--preset 30b`, cached locally for offline boot.
-- Changing it is `moelars service install` with new options, then `restart`. There's no hot
+- Changing it is `lars service install` with new options, then `restart`. There's no hot
   swap; a restart costs a few seconds.
 - Whatever wins the current work (corpus D, the two-seed average) gets in the same way.
 
@@ -127,19 +127,19 @@ session, which is all a coding agent needs, since agents only run once you're lo
   GPU: training slows down and requests wait. With `--idle-unload`, an unused service holds
   no memory during overnight runs.
 - For the heavy runs (the experts preset peaks at 93 GB), the queue scripts call
-  `moelars service stop` at the start and `start` at the end, next to their existing
+  `lars service stop` at the start and `start` at the end, next to their existing
   free-memory guard.
 
 ## 7. Agent setup
 
 - Claude Code:
-  `claude mcp add --transport http --scope user moelars http://127.0.0.1:8600/mcp`
-  (add `--header "Authorization: Bearer $MOELARS_API_KEY"` if a key is set).
-- Codex: `[mcp_servers.moelars]` with `url = "http://127.0.0.1:8600/mcp"` in
+  `claude mcp add --transport http --scope user lars http://127.0.0.1:8600/mcp`
+  (add `--header "Authorization: Bearer $LARS_API_KEY"` if a key is set).
+- Codex: `[mcp_servers.lars]` with `url = "http://127.0.0.1:8600/mcp"` in
   `~/.codex/config.toml`, if your Codex version supports Streamable HTTP servers; verify
   before relying on it. Otherwise use the bridge:
-  `command = "moelars"`, `args = ["mcp-bridge", "--url", "http://127.0.0.1:8600"]`.
-- `moelars mcp-bridge` is a stdio MCP server that holds no model and forwards each call to
+  `command = "lars"`, `args = ["mcp-bridge", "--url", "http://127.0.0.1:8600"]`.
+- `lars mcp-bridge` is a stdio MCP server that holds no model and forwards each call to
   the service. It's for clients that only speak stdio. Starting it costs nothing, and if the
   service is down it says so in a tool error.
 
@@ -164,7 +164,7 @@ session, which is all a coding agent needs, since agents only run once you're lo
 |---|---|
 | `/mcp` mount, four tools, output schemas, Origin check, tests | about half a day |
 | idle unload and reload, plus the real-MLX memory check | 2 to 3 hours, more if MLX keeps the memory |
-| `moelars service` commands and the plist | 2 to 3 hours |
+| `lars service` commands and the plist | 2 to 3 hours |
 | `mcp-bridge` | about an hour |
 | docs (README section, agent setup) | about an hour |
 

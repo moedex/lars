@@ -7,14 +7,14 @@
 set -e
 cd "$(dirname "$0")/.."
 UV=${UV:-uv}
-export MOELARS_MLX_CACHE_GB=${MOELARS_MLX_CACHE_GB:-16}  # the 4 GB serving default can slow training
+export LARS_MLX_CACHE_GB=${LARS_MLX_CACHE_GB:-16}  # the 4 GB serving default can slow training
 mkdir -p logs
 M30=mlx-community/Qwen3-30B-A3B-Instruct-2507-4bit
 RECORDS=(data/train/open-jev.train.jsonl data/train/jev-bench.train.jsonl data/train/tasksource-jev.train.jsonl)
 step() { echo "=== $(date '+%H:%M:%S') $1"; }
 
 step "lora-30b-experts: attention plus every expert LoRA, full corpus, one epoch"
-$UV run python -m moelars.train.lora --model $M30 --keys attn+experts --records $RECORDS --limit 20000 \
+$UV run python -m lars.train.lora --model $M30 --keys attn+experts --records $RECORDS --limit 20000 \
   --out checkpoints/lora-30b-experts > logs/lora-30b-experts.log 2>&1
 if grep -q '"improved": false' checkpoints/lora-30b-experts/adapter_config.json; then
   step "STOP: no checkpoint beat the untrained 30B; the saved adapter is the identity"; exit 1

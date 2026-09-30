@@ -1,4 +1,4 @@
-"""Run the official System One Python SDK against moe-LARS in-process.
+"""Run the official System One Python SDK against LARS in-process.
 
 Skipped when the SDK or its HTTP library is unavailable. This is the contract that
 matters: if these pass, every SDK-based integration works with a base URL swap.
@@ -13,20 +13,20 @@ import pytest
 typesafe_sdk = pytest.importorskip("typesafe_sdk")
 httpx2 = pytest.importorskip("httpx2")
 
-from moelars.backends.mock import MockBackend  # noqa: E402
-from moelars.engine import Engine  # noqa: E402
-from moelars.server import create_app  # noqa: E402
+from lars.backends.mock import MockBackend  # noqa: E402
+from lars.engine import Engine  # noqa: E402
+from lars.server import create_app  # noqa: E402
 
 
 @pytest.fixture
 def sdk_client(monkeypatch):
-    monkeypatch.delenv("MOELARS_API_KEY", raising=False)
+    monkeypatch.delenv("LARS_API_KEY", raising=False)
     transport_cls = getattr(httpx2, "ASGITransport", None)
     if transport_cls is None:
         pytest.skip("httpx2 has no ASGITransport")
     app = create_app(Engine(MockBackend()))
     return typesafe_sdk.AsyncTypeSafeClient(
-        api_key="test", base_url="http://moelars.test", transport=transport_cls(app=app)
+        api_key="test", base_url="http://lars.test", transport=transport_cls(app=app)
     )
 
 
@@ -53,13 +53,13 @@ def test_official_sdk_parses_all_three_primitives(sdk_client):
     assert 0 <= result.choices["department"].confidence <= 1
     assert result.scores["frustration"].legend[1] == "Frustrated"
     assert 0 <= result.scores["frustration"].score <= 2
-    assert result.model.startswith("moelars-")
+    assert result.model.startswith("lars-")
     assert result.usage.input_tokens is not None
 
 
 def test_official_sdk_lists_models(sdk_client):
     models = asyncio.run(sdk_client.models.list())
-    assert any(m.name == "moelars-latest" for m in models.models)
+    assert any(m.name == "lars-latest" for m in models.models)
 
 
 def test_official_sdk_surfaces_validation_errors(sdk_client):

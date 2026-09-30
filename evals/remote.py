@@ -1,6 +1,6 @@
 """Score another System One server with the suite's own metrics: `run_suite.py --endpoint URL`.
 
-`RemoteEngine` stands in for `moelars.engine.Engine` in `evaluate` and `calibrate`. It sends
+`RemoteEngine` stands in for `lars.engine.Engine` in `evaluate` and `calibrate`. It sends
 one question per request and returns the log of the server's probabilities as logits, so
 the per-config temperature and Platt fits apply to the remote model exactly as they do to
 a local one. A noul's P(yes) becomes the logit pair (logit(p), 0). Responses are cached
@@ -16,8 +16,8 @@ import json
 import httpx
 import numpy as np
 
-from moelars.calibration import Calibrator
-from moelars.primitives import logit, sigmoid
+from lars.calibration import Calibrator
+from lars.primitives import logit, sigmoid
 
 PROBABILITY_FLOOR = 1e-6
 

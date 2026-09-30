@@ -27,11 +27,11 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
-from moelars import __version__
-from moelars.backends import load_backend
-from moelars.calibration import Calibrator
-from moelars.engine import Engine
-from moelars.evalset import calibrate, collect_timed, evaluate, read_examples
+from lars import __version__
+from lars.backends import load_backend
+from lars.calibration import Calibrator
+from lars.engine import Engine
+from lars.evalset import calibrate, collect_timed, evaluate, read_examples
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -72,7 +72,7 @@ def render_table(results: dict, jev: dict, path: Path) -> None:
         f"Backend `{results['backend']}`, {results['rows_per_split']} test rows per config, "
         + (f"one pooled calibrator for every config (`{results['calibration']}`, as served)"
            if results.get("calibration") else f"calibration fitted on {results['rows_per_split']} validation rows")
-        + f". moe-LARS {results['version']}"
+        + f". LARS {results['version']}"
         + (f", pointer head `{results['head']}`" if results.get("head") else "")
         + ". Jev column quoted from jev-bench's published jev-1.13.0 run on full splits."
         + (f" Model load {results['load_s']}s." if results.get("load_s") is not None else "")
@@ -147,7 +147,7 @@ def main() -> int:
     parser.add_argument("--data-dir", default=str(HERE / "data"))
     parser.add_argument("--out-dir", default=str(HERE / "results"))
     parser.add_argument("--calibration-dir", default=str(HERE.parent / "calibration"))
-    parser.add_argument("--adapter", default=None, help="LoRA adapter directory from moelars.train.lora")
+    parser.add_argument("--adapter", default=None, help="LoRA adapter directory from lars.train.lora")
     parser.add_argument("--head", default=None, help="Tier B pointer head npz; runs every pass through it")
     parser.add_argument("--projection", default=None, help="projection.npy that the head was trained with")
     parser.add_argument("--tag", default=None, help="suffix for the result and calibrator files, e.g. 'head'")
@@ -192,7 +192,7 @@ def main() -> int:
     results["load_s"] = None if client else round(time.perf_counter() - load_started, 1)
     head = None
     if args.head:
-        from moelars.heads import PointerHeadScorer
+        from lars.heads import PointerHeadScorer
 
         head = PointerHeadScorer.load(args.head, args.projection or args.head.replace(".npz", ".projection.npy"))
     calibrators: dict[str, Calibrator] = {}

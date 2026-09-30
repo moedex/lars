@@ -8,7 +8,7 @@
 set -e
 cd "$(dirname "$0")/.."
 UV=${UV:-uv}
-export MOELARS_MLX_CACHE_GB=${MOELARS_MLX_CACHE_GB:-16}
+export LARS_MLX_CACHE_GB=${LARS_MLX_CACHE_GB:-16}
 mkdir -p logs
 MODEL=mlx-community/Qwen3-4B-Instruct-2507-4bit
 RECORDS=(data/train-e/open-jev.train.jsonl data/train-e/jev-bench.train.jsonl data/train-e/tasksource-jev.train.jsonl)
@@ -19,7 +19,7 @@ step() { echo "=== $(date '+%H:%M:%S') $1"; }
 SEED=${SEED:-0}
 NAME=lora-4b-e-s$SEED
 step "$NAME: full LoRA on the 4B, corpus E, seed $SEED, one epoch, selection on seen + unseen macro"
-$UV run python -m moelars.train.lora --model $MODEL --records $RECORDS --limit 50000 --seed $SEED \
+$UV run python -m lars.train.lora --model $MODEL --records $RECORDS --limit 50000 --seed $SEED \
   --holdout-sources $HOLDOUT --select-records data/train/jev-bench.validation.jsonl --select-skip $LICENSE_DROPPED \
   --out checkpoints/$NAME > logs/$NAME.log 2>&1
 if grep -q '"improved": false' checkpoints/$NAME/adapter_config.json; then
