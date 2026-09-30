@@ -26,16 +26,18 @@ def _release_device_memory() -> None:
 
 class LazyEngine:
     def __init__(self, factory: Callable[[], Any], idle_unload: float = 0.0,
-                 clock: Callable[[], float] = time.monotonic, engine: Any | None = None) -> None:
+                 clock: Callable[[], float] = time.monotonic, engine: Any | None = None,
+                 model_id: str | None = None) -> None:
         """`factory` builds the engine; `idle_unload` seconds without use drops it (0 keeps it).
 
-        Pass `engine` to start loaded, as `serve` does without `--idle-unload`."""
+        Pass `engine` to start loaded, as `serve` does without `--idle-unload`, or `model_id` to
+        name the model before its first load."""
         self._factory = factory
         self.idle_unload = idle_unload
         self._clock = clock
         self._engine = engine
         self._last_used = clock()
-        self.model_id: str | None = engine.model_id if engine is not None else None
+        self.model_id: str | None = engine.model_id if engine is not None else model_id
         self.version: str | None = getattr(engine, "version", None)
         self.calibrator_names: list[str] = sorted(getattr(engine, "named_calibrators", {}) or {})
         self.loads = 0

@@ -44,6 +44,9 @@ def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
     named = load_named_calibrators(getattr(args, "calibration_dir", None))
     backend = load_backend(args.backend, model=model, template=args.template,
                            adapter=adapters if len(adapters) > 1 else (adapters[0] if adapters else None))
+    if model != args.model:
+        # Name the model by the reference it was served from (moedex/lars/4b), not its cache path.
+        backend.model_name = backend.model_name.replace(model, args.model, 1)
     if len(adapters) > 1:
         if args.head:
             raise SystemExit("a pointer head cannot be combined with several adapters")
@@ -61,6 +64,15 @@ def _engine_from_args(args: argparse.Namespace) -> Engine | EnsembleEngine:
         head = PointerHeadScorer.load(args.head, args.projection or str(args.head).replace(".npz", ".projection.npy"))
     return Engine(backend, calibrator=calibrators[0] if calibrators else None, version=__version__, head=head,
                   named_calibrators=named, **budgets)
+
+
+def _expected_model_id(args: argparse.Namespace) -> str:
+    """The engine's model ID before it is built, so `/healthz` can name it while unloaded."""
+    from pathlib import Path
+
+    name = "lars-mock" if args.backend == "mock" else "+".join(
+        [args.model or "", *(Path(a).name for a in args.adapter or [])])
+    return f"lars-{__version__}+{args.backend}:{name}"
 
 
 def load_named_calibrators(directory: str | None) -> dict[str, Calibrator]:
@@ -115,7 +127,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     _check_local_paths(args)
     if idle:
         # Loaded by the first request, not at startup: a login service costs nothing until used.
-        holder = LazyEngine(lambda: _engine_from_args(args), idle_unload=idle)
+        holder = LazyEngine(lambda: _engine_from_args(args), idle_unload=idle, model_id=_expected_model_id(args))
         described = f"{args.backend}:{args.model} (loads on first request, unloads after {idle:.0f}s idle)"
     else:
         engine = _engine_from_args(args)
