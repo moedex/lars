@@ -1,0 +1,12 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 2.518079266713203,
+    "score": 1.0,
+    "multi": 1.0
+  },
+  "platt": {},
+  "fusion": {},
+  "fitted_on": "jev-bench/ledgar/validation[:200]",
+  "escalate": null
+}

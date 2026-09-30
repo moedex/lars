@@ -1,0 +1,17 @@
+{
+  "temperatures": {
+    "noul": 1.0,
+    "choice": 1.0,
+    "score": 1.0,
+    "multi": 1.0
+  },
+  "platt": {
+    "noul": [
+      0.30194277648661244,
+      -0.20737007481432285
+    ]
+  },
+  "fusion": {},
+  "fitted_on": "jev-bench/fever_evidence/validation[:200]",
+  "escalate": null
+}
